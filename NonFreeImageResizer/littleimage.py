@@ -8,6 +8,7 @@ import urllib
 import cgi
 import littleimage
 import sys
+sys.path.append("/data/project/datbot/Tasks/NonFreeImageResizer")
 import urllib2
 import requests
 import math
@@ -37,33 +38,33 @@ def gimme_image(filename,compound_site,pxl,theimage):
 	filename.
 	"""
 	site = mwclient.Site(compound_site)
-	
+
 	extension = os.path.splitext(theimage)[1]
 	extension_caps = extension[1:].upper()
-		
+
 	if extension_caps == "JPG":
 		extension_caps = "JPEG"
-	
+
 	if extension_caps == "GIF":
 		results = "SKIP"
 		return results
 
-	image_1 = site.Images[theimage] 
+	image_1 = site.Images[theimage]
 	image_2 = str(image_1.imageinfo['url'])
-	
+
 	response = requests.get(image_2)
 	item10 = cStringIO.StringIO(response.content)
 
 	temp_file = str(uuid.uuid4()) + extension
 	f = open(temp_file,'w')
 	f.write(item10.getvalue())
-	
+
 	try:
 		img = Image.open(item10)
 		basewidth = int(math.sqrt((pxl * float(img.size[0]))/(img.size[1])))
 		wpercent = (basewidth/float(img.size[0]))
 		hsize = int((float(img.size[1])*float(wpercent)))
-		
+
 		original_pixel = img.size[0] * img.size[1]
 		modified_pixel = basewidth * hsize
 		pct_chg = 100.0 *  (original_pixel - modified_pixel) / float(original_pixel)

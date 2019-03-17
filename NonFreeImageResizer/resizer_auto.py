@@ -95,12 +95,31 @@ def image_routine(images):
                 filename = str(uuid.uuid4())
                 file = littleimage.gimme_image(filename,compound_site,pxl,theimage)
 
-                if file == "SKIP":
+                if file == "BOMB":
+                    print "Decompression bomb warning"
+                    errorPage = site.Pages["User:DatBot/pageerror"]
+                    errorText = errorPage.text()
+                    errorText += "\n[[:File:%s]] is probably a decompression bomb. Skipping." % theimage
+                    errorPage.save(errorText, summary = "Reporting decompresion bomb ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])")
+                    page = site.Pages[img_name]
+                    manualText = '{{Non-free manual reduce}}'
+                    text = page.text()
+                    text = re.sub(r'\{\{[Nn]on.?free-?\s*[Rr]educe.*?\}\}', manualText, text)
+                    text = re.sub(r'\{\{[Rr]educe.*?\}\}', manualText, text)
+                    text = re.sub(r'\{\{[Cc]omic-ovrsize-img.*?\}\}', manualText, text)
+                    text = re.sub(r'\{\{[Ff]air.?[Uu]se.?[Rr]educe.*?\}\}', manualText, text)
+                    text = re.sub(r'\{\{[Ii]mage-toobig.*?\}\}', manualText, text)
+                    text = re.sub(r'\{\{[Nn]fr.*?\}\}', manualText, text)
+                    text = re.sub(r'\{\{[Ss]maller image.*?\}\}', manualText, text)
+                    page.save(text, summary = "Changing template to Non-free manual reduce, too many pixels for automatic resizing ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])")
+
+
+                elif file == "SKIP":
                     print "Skipping GIF."
                     messager12345 = "Skipped gif: " + theimage
                     logger.error(messager12345)
 
-                if file == "PIXEL":
+                elif file == "PIXEL":
                     print "Removing tag...already reduced..."
                     img_name = "File:" + theimage
                     page = site.Pages[img_name]
@@ -113,8 +132,17 @@ def image_routine(images):
                     text = re.sub(r'\{\{[Nn]fr.*?\}\}', '', text)
                     text = re.sub(r'\{\{[Ss]maller image.*?\}\}', '', text)
                     page.save(text, summary = "Removing {{[[Template:Non-free reduce|Non-free reduce]]}} since file is already adequately reduced ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])")
-
-                elif file not in ("ERROR", "PIXEL", "SKIP"):
+                elif file == "ERROR":
+                    print "Image skipped."
+                    messager123 = "Skipped " + theimage
+                    filelist = [ f for f in os.listdir(".") if f.startswith(filename) ]
+                    for fa in filelist:
+                        try:
+                            fa.remove()
+                        except:
+                            os.remove(fa)
+                    logger.error(messager123)
+                else:
                     try:
                         site.upload(open(file, 'rb'), theimage, "Reduce size of non-free image ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])", ignore=True)
 
@@ -128,18 +156,18 @@ def image_routine(images):
                         img_name = "File:" + theimage
 
                         page = site.Pages[img_name]
+                        orphanedText = '{{Orphaned non-free revisions|date=~~~~~}}'
                         text = page.text()
-                        text = re.sub(r'\{\{[Nn]on.?free-?\s*[Rr]educe.*?\}\}', '{{Orphaned non-free revisions|date=~~~~~}}', text)
-                        text = re.sub(r'\{\{[Rr]educe.*?\}\}', '{{Orphaned non-free revisions|date=~~~~~}}', text)
-                        text = re.sub(r'\{\{[Cc]omic-ovrsize-img.*?\}\}', '{{Orphaned non-free revisions|date=~~~~~}}', text)
-                        text = re.sub(r'\{\{[Ff]air.?[Uu]se.?[Rr]educe.*?\}\}', '{{Orphaned non-free revisions|date=~~~~~}}', text)
-                        text = re.sub(r'\{\{[Ii]mage-toobig.*?\}\}', '{{Orphaned non-free revisions|date=~~~~~}}', text)
-                        text = re.sub(r'\{\{[Nn]fr.*?\}\}', '{{Orphaned non-free revisions|date=~~~~~}}', text)
-                        text = re.sub(r'\{\{[Ss]maller image.*?\}\}', '{{Orphaned non-free revisions|date=~~~~~}}', text)
+                        text = re.sub(r'\{\{[Nn]on.?free-?\s*[Rr]educe.*?\}\}', orphanedText, text)
+                        text = re.sub(r'\{\{[Rr]educe.*?\}\}', orphanedText, text)
+                        text = re.sub(r'\{\{[Cc]omic-ovrsize-img.*?\}\}', orphanedText, text)
+                        text = re.sub(r'\{\{[Ff]air.?[Uu]se.?[Rr]educe.*?\}\}', orphanedText, text)
+                        text = re.sub(r'\{\{[Ii]mage-toobig.*?\}\}', orphanedText, text)
+                        text = re.sub(r'\{\{[Nn]fr.*?\}\}', orphanedText, text)
+                        text = re.sub(r'\{\{[Ss]maller image.*?\}\}', orphanedText, text)
                         page.save(text, summary = "Tagging with {{[[Template:Orphaned non-free revisions|Orphaned non-free revisions]]}} ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])")
 
                         print "Tagged!"
-                        time.sleep(5)
                     except:
                         print "Unknown error. Image skipped."
                         messager12345 = "Unknown error; skipped " + theimage
@@ -151,24 +179,10 @@ def image_routine(images):
                                 fa.remove()
                             except:
                                 os.remove(fa)
-
-                else:
-                    print "Image skipped."
-                    messager123 = "Skipped " + theimage
-                    filelist = [ f for f in os.listdir(".") if f.startswith(filename) ]
-                    for fa in filelist:
-                        try:
-                            fa.remove()
-                        except:
-                            os.remove(fa)
-                    time.sleep(5)
-                    logger.error(messager123)
             else:
                 print "Gah, looks like someone removed the tag."
                 messager1234 = "Tag removed on image; skipped " + theimage
                 logger.error(messager1234)
-                time.sleep(5)
-
         else:
             print "Ah, darn - looks like the bot was disabled."
             sys.exit()

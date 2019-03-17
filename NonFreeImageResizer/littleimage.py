@@ -83,7 +83,7 @@ def gimme_image(filename,compound_site,pxl,theimage):
 		return results
 	except DecompressionBombWarning:
 		results = "BOMB"
-        return results
+        	return results
 
 	print "Image saved to disk at " + filename + extension
 	results = filename + extension

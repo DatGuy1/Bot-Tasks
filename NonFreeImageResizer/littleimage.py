@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 from PIL import Image
+from PIL.Image import DecompressionBombWarning
 import pyexiv2
 import cStringIO
 import mwclient
@@ -80,6 +81,9 @@ def gimme_image(filename,compound_site,pxl,theimage):
 		print "Unable to open image " + theimage + " (aborting)"
 		results = "ERROR"
 		return results
+	except DecompressionBombWarning:
+		results = "BOMB"
+        return results
 
 	print "Image saved to disk at " + filename + extension
 	results = filename + extension

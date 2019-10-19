@@ -99,9 +99,9 @@ def image_routine(images):
                     print "Decompression bomb warning"
                     errorPage = site.Pages["User:DatBot/pageerror"]
                     errorText = errorPage.text()
-                    errorText += "\n[[:File:%s]] is probably a decompression bomb. Skipping." % theimage
+                    errorText += "\n\n[[:File:%s]] is probably a decompression bomb. Skipping." % theimage
                     errorPage.save(errorText, summary = "Reporting decompresion bomb ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])")
-                    page = site.Pages[img_name]
+                    page = site.Pages["File:%s" % theimage]
                     manualText = '{{Non-free manual reduce}}'
                     text = page.text()
                     text = re.sub(r'\{\{[Nn]on.?free-?\s*[Rr]educe.*?\}\}', manualText, text)

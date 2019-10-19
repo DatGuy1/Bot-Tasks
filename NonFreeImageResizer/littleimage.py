@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 from PIL import Image
-from PIL.Image import DecompressionBombWarning
 import pyexiv2
 import cStringIO
 import mwclient
@@ -62,6 +61,11 @@ def gimme_image(filename,compound_site,pxl,theimage):
 
 	try:
 		img = Image.open(item10)
+		if (img.size[0] * img.size[1]) > 80000000:
+			img.close()
+			results = "BOMB"
+			return results
+
 		basewidth = int(math.sqrt((pxl * float(img.size[0]))/(img.size[1])))
 		wpercent = (basewidth/float(img.size[0]))
 		hsize = int((float(img.size[1])*float(wpercent)))
@@ -81,17 +85,14 @@ def gimme_image(filename,compound_site,pxl,theimage):
 		print "Unable to open image " + theimage + " (aborting)"
 		results = "ERROR"
 		return results
-	except DecompressionBombWarning:
-		results = "BOMB"
-        	return results
 
 	print "Image saved to disk at " + filename + extension
 	results = filename + extension
 	try:
 		metadata(source_path=temp_file,dest_path=results,image=img)
 		print "Image EXIF data copied!"
-	except (IOError, ValueError):
-		print "EXIF copy failed. Oh well - no pain, no gain."
+	except (IOError, ValueError) as e:
+		print "EXIF copy failed. Oh well - no pain, no gain. %s" % e
 	filelist = [ f for f in os.listdir(".") if f.startswith(temp_file) ]
 	for fa in filelist: os.remove(fa)
 	return results

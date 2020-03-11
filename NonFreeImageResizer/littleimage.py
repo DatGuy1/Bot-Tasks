@@ -1,98 +1,89 @@
 #! /usr/bin/env python
 from PIL import Image
 import pyexiv2
-import cStringIO
-import mwclient
 import uuid
-import urllib
-import cgi
-import littleimage
 import sys
-sys.path.append("/data/project/datbot/Tasks/NonFreeImageResizer")
-import urllib2
-import requests
 import math
-import tempfile
 import os
 
-# CC-BY-SA Theopolisme
-# Task 1 on [[User:Theo's Little Bot]] (subsidiary)
+sys.path.append("/data/project/datbot/Tasks/NonFreeImageResizer")
 
-def metadata(source_path, dest_path, image):
-	"""This function moves the metadata
-	from the old image to the new, reduced
-	image using pyexiv2.
-	"""
-	source_image = pyexiv2.metadata.ImageMetadata(source_path)
-	source_image.read()
-	dest_image = pyexiv2.metadata.ImageMetadata(dest_path)
-	dest_image.read()
-	source_image.copy(dest_image)
-	dest_image["Exif.Photo.PixelXDimension"] = image.size[0]
-	dest_image["Exif.Photo.PixelYDimension"] = image.size[1]
-	dest_image.write()
+# CC-BY-SA Theopolisme, DatGuy
+# Task 3 on DatBot
 
-def gimme_image(filename,compound_site,pxl,theimage):
-	"""This function creates the new image, runs
-	metadata(), and passes along the new image's
-	filename.
-	"""
-	site = mwclient.Site(compound_site)
 
-	extension = os.path.splitext(theimage)[1]
-	extension_caps = extension[1:].upper()
+def updateMetadata(sourcePath, destPath, image):
+    """This function moves the metadata
+    from the old image to the new, reduced
+    image using pyexiv2.
+    """
+    sourceImage = pyexiv2.metadata.ImageMetadata(sourcePath)
+    sourceImage.read()
+    destImage = pyexiv2.metadata.ImageMetadata(destPath)
+    destImage.read()
+    sourceImage.copy(destImage)
+    destImage["Exif.Photo.PixelXDimension"] = image.size[0]
+    destImage["Exif.Photo.PixelYDimension"] = image.size[1]
+    destImage.write()
 
-	if extension_caps == "JPG":
-		extension_caps = "JPEG"
 
-	if extension_caps == "GIF":
-		results = "SKIP"
-		return results
+def downloadImage(randomName, origName, site):
+    """This function creates the new image, runs
+    metadata(), and passes along the new image's
+    random name.
+    """
+    extension = os.path.splitext(origName)[1]
+    extensionLower = extension[1:].lower()
 
-	image_1 = site.Images[theimage]
-	image_2 = str(image_1.imageinfo['url'])
+    if extensionLower == "jpg":
+        extensionLower = "jpeg"
+    elif extensionLower == "gif":
+        return "SKIP"
 
-	response = requests.get(image_2)
-	item10 = cStringIO.StringIO(response.content)
+    mwImage = site.Images[origName]
 
-	temp_file = str(uuid.uuid4()) + extension
-	f = open(temp_file,'w')
-	f.write(item10.getvalue())
+    tempFile = str(uuid.uuid4()) + extension
+    with open(tempFile, "wb") as f:
+        mwImage.download(f)
 
-	try:
-		img = Image.open(item10)
-		if (img.size[0] * img.size[1]) > 80000000:
-			img.close()
-			results = "BOMB"
-			return results
+    try:
+        fullName = randomName + extension
+        img = Image.open(tempFile)
+        imgWidth = img.size[0]
+        imgHeight = img.size[1]
+        if (imgWidth * imgHeight) > 80000000:
+            img.close()
+            return "BOMB"
 
-		basewidth = int(math.sqrt((pxl * float(img.size[0]))/(img.size[1])))
-		wpercent = (basewidth/float(img.size[0]))
-		hsize = int((float(img.size[1])*float(wpercent)))
+        baseWidth = int(math.sqrt((100000.0 * float(imgWidth)) / (imgHeight)))
+        widthPercent = baseWidth / float(imgWidth)
+        heightSize = int((float(imgHeight) * float(widthPercent)))
 
-		original_pixel = img.size[0] * img.size[1]
-		modified_pixel = basewidth * hsize
-		pct_chg = 100.0 *  (original_pixel - modified_pixel) / float(original_pixel)
-		if pct_chg > 5:
-			png_info = img.info
-			img = img.resize((int(basewidth),int(hsize)), Image.ANTIALIAS)
-			img.save(filename + extension, **png_info)
-		else:
-			print "Looks like we'd have a less than 5% change in pixel counts. Skipping."
-			results = "PIXEL"
-			return results
-	except (IOError):
-		print "Unable to open image " + theimage + " (aborting)"
-		results = "ERROR"
-		return results
+        originalPixels = imgWidth * imgHeight
+        modifiedPixels = baseWidth * heightSize
+        percentChange = 100.0 * (originalPixels - modifiedPixels) / float(originalPixels)
+        if percentChange > 5:
+            img = img.resize((int(baseWidth), int(heightSize)), Image.ANTIALIAS)
+            img.save(fullName, **img.info)
+        else:
+            img.close()
+            print("Looks like we'd have a less than 5% change in pixel counts. Skipping.")
+            return "PIXEL"
+    except IOError as e:
+        img.close()
+        print("Unable to open image {0} - aborting ({1})".format(origName, e))
+        return "ERROR"
 
-	print "Image saved to disk at " + filename + extension
-	results = filename + extension
-	try:
-		metadata(source_path=temp_file,dest_path=results,image=img)
-		print "Image EXIF data copied!"
-	except (IOError, ValueError) as e:
-		print "EXIF copy failed. Oh well - no pain, no gain. %s" % e
-	filelist = [ f for f in os.listdir(".") if f.startswith(temp_file) ]
-	for fa in filelist: os.remove(fa)
-	return results
+    print("Image saved to disk at {0}{1}".format(randomName, extension))
+
+    try:
+        updateMetadata(tempFile, fullName, img)  # pyexiv2, see top
+        print("Image EXIF data copied!")
+    except (IOError, ValueError) as e:
+        print("EXIF copy failed. Oh well - no pain, no gain. {0}".format(e))
+
+    filelist = [f for f in os.listdir(".") if f.startswith(tempFile)]
+    for fa in filelist:
+        os.remove(fa)
+
+    return fullName

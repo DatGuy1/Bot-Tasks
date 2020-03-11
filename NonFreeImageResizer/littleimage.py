@@ -64,7 +64,7 @@ def downloadImage(randomName, origName, site):
         percentChange = 100.0 * (originalPixels - modifiedPixels) / float(originalPixels)
         if percentChange > 5:
             img = img.resize((int(baseWidth), int(heightSize)), Image.ANTIALIAS)
-            img.save(fullName, **img.info)
+            img.save(fullName, **img.info, quality=95)
         else:
             img.close()
             print("Looks like we'd have a less than 5% change in pixel counts. Skipping.")

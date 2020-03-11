@@ -6,9 +6,8 @@
 # CC-BY-SA / User:Theopolisme on Wikipedia
 # Modified by User:DatGuy
 
-from collections import OrderedDict
 import re
-from wikitools import *
+from wikitools import wiki, page, api
 import userpass
 
 site = wiki.Wiki()
@@ -183,7 +182,7 @@ def main():
         "User:WP 1.0 bot/WikiWork/ar": printWPScoreOrTA(totalArticlesArray),
         "User:WP 1.0 bot/WikiWork/ww": printWPScoreOrTA(wikiworkArray),
         "User:WP 1.0 bot/WikiWork/om": printOmegaScore(omegaArray),
-        "User:WP 1.0 bot/WikiWork/all": printTable(wikiWorkArray, omegaArray),
+        "User:WP 1.0 bot/WikiWork/all": printTable(wikiworkArray, omegaArray),
     }
 
     for pageName, pageContent in newContent.items():

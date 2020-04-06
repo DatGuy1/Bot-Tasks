@@ -7,23 +7,30 @@ import logging
 import littleimage
 import userpass
 import bot
+
 sys.path.append("/data/project/datbot/Tasks/NonFreeImageResizer")
 
 # CC-BY-SA Theopolisme, DatGuy
 # Task 3 DatBot
 
-logger = logging.getLogger('resizer_auto')
-hdlr = logging.FileHandler('resizer_auto.log')
-formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger("resizer_auto")
+hdlr = logging.FileHandler("resizer_auto.log")
+formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
 logger.setLevel(logging.WARNING)
 
-regexList = [r'\{\{[Nn]on.?free-?\s*[Rr]educe.*?\}\}', r'\{\{[Rr]educe.*?\}\}',
-             r'\{\{[Cc]omic-ovrsize-img.*?\}\}',
-             r'\{\{[Ff]air.?[Uu]se.?[Rr]educe.*?\}\}',
-             r'\{\{[Ii]mage-toobig.*?\}\}', r'\{\{[Nn]fr.*?\}\}',
-             r'\{\{[Ss]maller image.*?\}\}']
+regexList = [
+    r"\{\{[Nn]on.?free-?\s*[Rr]educe.*?\}\}",
+    r"\{\{[Rr]educe.*?\}\}",
+    r"\{\{[Cc]omic-ovrsize-img.*?\}\}",
+    r"\{\{[Ff]air.?[Uu]se.?[Rr]educe.*?\}\}",
+    r"\{\{[Ii]mage-toobig.*?\}\}",
+    r"\{\{[Nn]fr.*?\}\}",
+    r"\{\{[Ss]maller image.*?\}\}",
+]
+
+suffixStr = " ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])"
 
 
 def checkFinished(filesDone):
@@ -33,7 +40,6 @@ def checkFinished(filesDone):
             return True
         else:
             return False
-
     return True
 
 
@@ -50,7 +56,6 @@ def fileExists(imageTitle):
     for regexPhrase in regexList:
         if re.search(regexPhrase, pageText) is not None:
             return True
-
     return False
 
 
@@ -76,39 +81,51 @@ def imageRoutine(imageList):
                     print("Decompression bomb warning")
                     errorPage = site.Pages["User:DatBot/pageerror"]
                     errorText = errorPage.text()
-                    errorText += "\n\n[[:File:{0}]] is probably a decompression bomb. Skipping.".format(imageName)
-                    errorPage.save(errorText, summary="Reporting decompresion bomb ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])")
+                    errorText += "\n\n[[:File:{0}]] is probably a "
+                    "decompression bomb. Skipping.".format(imageName)
+
+                    errorPage.save(
+                        errorText,
+                        summary="Reporting decompression bomb" + suffixStr,
+                    )
 
                     page = site.Pages["File:{0}".format(imageName)]
                     text = page.text()
                     for regexPhrase in regexList:
-                        text = re.sub(regexPhrase, '{{Non-free manual reduce}}', text)
+                        text = re.sub(regexPhrase, "{{Non-free manual reduce}}", text)
 
-                    page.save(text, summary="Changing template to Non-free manual reduce, too many pixels for automatic resizing ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])")
-
+                    page.save(
+                        text,
+                        summary="Changing template to Non-free manual reduce, "
+                        "too many pixels for automatic resizing" + suffixStr
+                    )
                 elif fileResult == "SKIP":
                     print("Skipping GIF.")
                     logger.error("Skipped gif: {0}".format(imageName))
-
                 elif fileResult == "PIXEL":
-                    print("Removing tag...already reduced...")
+                    print("Removing tag, already reduced.")
 
                     page = site.Pages[fullImageName]
                     text = page.text()
                     for regexPhrase in regexList:
-                        text = re.sub(regexPhrase, '', text)
-
-                    page.save(text, summary="Removing {{[[Template:Non-free reduce|Non-free reduce]]}} since file "
-                                            "is already adequately reduced ([[WP:BOT|BOT]] - "
-                                            "[[User:DatBot/NonFreeImageResizer/Run|disable]])")
-
+                        text = re.sub(regexPhrase, "", text)
+                    page.save(
+                        text,
+                        summary="Removing {{[[Template:Non-free reduce|Non-free reduce]]}}"
+                        " since file is already adequately reduced" + suffixStr
+                    )
                 elif fileResult == "ERROR":
                     print("Image skipped.")
                     logger.error("Skipped {0}" + imageName)
                     bot.deleteFile(randomName)
                 else:
                     try:
-                        site.upload(open(fileResult, 'rb'), imageName, "Reduce size of non-free image ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])", ignore=True)
+                        site.upload(
+                            open(fileResult, "rb"),
+                            imageName,
+                            "Reduce size of non-free image" + suffixStr,
+                            ignore=True,
+                        )
 
                         print("Uploaded!")
                         bot.deleteFile(randomName)
@@ -116,10 +133,16 @@ def imageRoutine(imageList):
                         page = site.Pages[fullImageName]
                         text = page.text()
                         for regexPhrase in regexList:
-                            text = re.sub(regexPhrase, '{{Orphaned non-free revisions|date=~~~~~}}', text)
+                            text = re.sub(
+                                regexPhrase,
+                                "{{Orphaned non-free revisions|date=~~~~~}}",
+                                text,
+                            )
 
-                        page.save(text, summary="Tagging with {{[[Template:Orphaned non-free revisions|Orphaned non-free revisions]]}}"
-                                                " ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])")
+                        page.save(
+                            text,
+                            summary="Tagging with {{[[Template:Orphaned non-free revisions|Orphaned non-free revisions]]}}" + suffixStr
+                        )
 
                         print("Tagged!")
                     except Exception as e:
@@ -144,10 +167,12 @@ def main():
     Then it runs image_routine() on this selection.
     """
     global site
-    site = mwclient.Site('en.wikipedia.org')
+    site = mwclient.Site("en.wikipedia.org")
     site.login(userpass.username, userpass.password)
 
-    sizeReductionCategory = mwclient.listing.Category(site, "Category:Wikipedia non-free file size reduction requests")
+    sizeReductionCategory = mwclient.listing.Category(
+        site, "Category:Wikipedia non-free file size reduction requests"
+    )
     sizeReductionRequests = sizeReductionCategory.members()
     cleanImageList = []
     for image in sizeReductionRequests:
@@ -159,5 +184,5 @@ def main():
     print("We're DONE!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

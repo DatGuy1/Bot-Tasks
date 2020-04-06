@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import pyexiv2
 import uuid
 import sys
@@ -63,12 +63,22 @@ def downloadImage(randomName, origName, site):
         modifiedPixels = baseWidth * heightSize
         percentChange = 100.0 * (originalPixels - modifiedPixels) / float(originalPixels)
         if percentChange > 5:
+            originalMode = img.mode
+            if originalMode in ["1", "L", "P"]:
+                img = img.convert("RGBA")
+
             img = img.resize((int(baseWidth), int(heightSize)), Image.ANTIALIAS)
+            if originalMode in ["1", "L", "P"]:
+                img = img.convert(originalMode, palette=Image.ADAPTIVE)
+
             img.save(fullName, **img.info, quality=95)
         else:
             img.close()
             print("Looks like we'd have a less than 5% change in pixel counts. Skipping.")
             return "PIXEL"
+    except UnidentifiedImageError as e:
+        print("Unable to open image {0} - aborting ({1})".format(origName, e))
+        return "ERROR"
     except IOError as e:
         img.close()
         print("Unable to open image {0} - aborting ({1})".format(origName, e))

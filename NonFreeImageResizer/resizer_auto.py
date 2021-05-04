@@ -1,12 +1,16 @@
 #! /usr/bin/python
-import mwclient
-import uuid
-import sys
-import re
+# TODO: Major cleanup required
+
 import logging
-import littleimage
-import userpass
+import re
+import sys
+import time
+import uuid
+
 import bot
+import littleimage
+import mwclient
+import userpass
 
 sys.path.append("/data/project/datbot/Tasks/NonFreeImageResizer")
 
@@ -28,9 +32,12 @@ regexList = [
     r"\{\{[Ii]mage-toobig.*?\}\}",
     r"\{\{[Nn]fr.*?\}\}",
     r"\{\{[Ss]maller image.*?\}\}",
+    r"\{\{([Nn]on-free\s*)?[sS][vV][gG] upscale.*?\}\}",
 ]
 
 suffixStr = " ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])"
+
+site = mwclient.Site("en.wikipedia.org")
 
 
 def checkFinished(filesDone):
@@ -44,7 +51,7 @@ def checkFinished(filesDone):
 
 
 def fileExists(imageTitle):
-    """ This function makes sure that
+    """This function makes sure that
     a given image is still tagged with
     {{non-free reduce}}.
     """
@@ -56,63 +63,75 @@ def fileExists(imageTitle):
     for regexPhrase in regexList:
         if re.search(regexPhrase, pageText) is not None:
             return True
+
     return False
 
 
-def imageRoutine(imageList):
-    """ This function does most of the work:
-    * First, checks the checkpage using checkFinished()
-    * Then makes sure the image file still exists using are_you_still_there()
-    * Next it actually resizes the image.
-    * As long as the resize works, we reupload the file.
-    * Then we update the page with {{Orphaned non-free revisions}}.
-    * And repeat!
-    """
+def imageRoutine(imageList, upscaleTask, nonFree):
     filesDone = 0
     for imageName in imageList:
         print("Working on {0}".format(imageName))
         if checkFinished(filesDone):
             if fileExists(imageName):
                 fullImageName = "File:{0}".format(imageName)
-                randomName = str(uuid.uuid4())
-                fileResult = littleimage.downloadImage(randomName, imageName, site)
+                imagePage = site.Images[imageName]
 
-                if fileResult == "BOMB":
+                randomName = str(uuid.uuid4())
+                fileResult = littleimage.downloadImage(randomName, imagePage, site)
+
+                if fileResult == "BOMB" and nonFree:
                     print("Decompression bomb warning")
                     errorPage = site.Pages["User:DatBot/pageerror"]
                     errorText = errorPage.text()
-                    errorText += "\n\n[[:File:{0}]] is probably a "
-                    "decompression bomb. Skipping.".format(imageName)
+                    errorText += "\n\n[[:{0}]] is probably a decompression bomb. Skipping.".format(
+                        fullImageName
+                    )
 
                     errorPage.save(
                         errorText,
                         summary="Reporting decompression bomb" + suffixStr,
                     )
 
-                    page = site.Pages["File:{0}".format(imageName)]
-                    text = page.text()
+                    text = imagePage.text()
                     for regexPhrase in regexList:
                         text = re.sub(regexPhrase, "{{Non-free manual reduce}}", text)
-
-                    page.save(
+                    imagePage.save(
                         text,
                         summary="Changing template to Non-free manual reduce, "
-                        "too many pixels for automatic resizing" + suffixStr
+                                "too many pixels for automatic resizing" + suffixStr,
                     )
-                elif fileResult == "SKIP":
-                    print("Skipping GIF.")
-                    logger.error("Skipped gif: {0}".format(imageName))
                 elif fileResult == "PIXEL":
-                    print("Removing tag, already reduced.")
+                    print("Removing tag, already close enough to target size.")
 
-                    page = site.Pages[fullImageName]
-                    text = page.text()
+                    text = imagePage.text()
                     for regexPhrase in regexList:
                         text = re.sub(regexPhrase, "", text)
-                    page.save(
+                    imagePage.save(
                         text,
-                        summary="Removing {{[[Template:Non-free reduce|Non-free reduce]]}}"
-                        " since file is already adequately reduced" + suffixStr
+                        summary="Removing {{{{[[Template:{0}|{0}]]}}}} since file is already adequately sized".format(
+                            "SVG upscale" if upscaleTask else "Non-free reduce"
+                        ) + suffixStr,
+                    )
+                elif fileResult == "MISMATCH":
+                    print("Size mismatch")
+                    errorPage = site.Pages["User:DatBot/pageerror"]
+                    errorText = errorPage.text()
+                    errorText += "\n\nSize of [[:File:{0}]] is a mismatch between SVG and PNG. Skipping.".format(
+                        imageName
+                    )
+
+                    errorPage.save(
+                        errorText,
+                        summary="Reporting size mismatch" + suffixStr,
+                    )
+
+                    text = imagePage.text()
+                    for regexPhrase in regexList:
+                        text = re.sub(regexPhrase, "{{Non-free manual reduce}}", text)
+                    imagePage.save(
+                        text,
+                        summary="Changing template to Non-free manual reduce, "
+                                "size in data doesn't match Wikipedia's size" + suffixStr,
                     )
                 elif fileResult == "ERROR":
                     print("Image skipped.")
@@ -120,34 +139,48 @@ def imageRoutine(imageList):
                     bot.deleteFile(randomName)
                 else:
                     try:
+                        # noinspection PyTypeChecker
                         site.upload(
                             open(fileResult, "rb"),
                             imageName,
-                            "Reduce size of non-free image" + suffixStr,
+                            (
+                                "Upscale SVG and cleanup SVG code"
+                                if upscaleTask
+                                else "Reduce size of non-free image"
+                            )
+                            + suffixStr,
                             ignore=True,
                         )
 
                         print("Uploaded!")
+
                         bot.deleteFile(randomName)
 
-                        page = site.Pages[fullImageName]
-                        text = page.text()
+                        text = imagePage.text()
                         for regexPhrase in regexList:
                             text = re.sub(
                                 regexPhrase,
-                                "{{Orphaned non-free revisions|date=~~~~~}}",
+                                "{{Orphaned non-free revisions|date=~~~~~}}"
+                                if nonFree
+                                else "",
                                 text,
                             )
-
-                        page.save(
+                        imagePage.save(
                             text,
-                            summary="Tagging with {{[[Template:Orphaned non-free revisions|Orphaned non-free revisions]]}}" + suffixStr
+                            summary=("Tagging with {{[[Template:Orphaned non-free revisions|Orphaned non-free "
+                                     "revisions]]}}, see [[WP:IMAGERES|instructions]] " if nonFree
+                                     else "Removing {{[["
+                                          "Template:SVG "
+                                          "upscale|SVG "
+                                          "upscale]]}}") + suffixStr,
                         )
 
                         print("Tagged!")
                     except Exception as e:
                         print("Unknown error. Image skipped.")
-                        logger.error("Unknown error; skipped {0} ({1})".format(imageName, e))
+                        logger.error(
+                            "Unknown error; skipped {0} ({1})".format(imageName, e)
+                        )
                         bot.deleteFile(imageName)
             else:
                 print("Gah, looks like someone removed the tag.")
@@ -159,28 +192,45 @@ def imageRoutine(imageList):
         filesDone += 1
 
 
-def main():
-    """This defines and fills a global
-    variable for the site, and then gets
-    selection of images to work with from
-    Category:Wikipedia non-free file size reduction requests.
-    Then it runs image_routine() on this selection.
-    """
-    global site
-    site = mwclient.Site("en.wikipedia.org")
-    site.login(userpass.username, userpass.password)
-
+def getMembersForCategory(categoryName):
+    cleanImageList = []
+    print(categoryName)
     sizeReductionCategory = mwclient.listing.Category(
-        site, "Category:Wikipedia non-free file size reduction requests"
+        site, "Category:{0}".format(categoryName)
     )
     sizeReductionRequests = sizeReductionCategory.members()
-    cleanImageList = []
+
     for image in sizeReductionRequests:
         pageTitle = image.page_title
         print(pageTitle)
         cleanImageList.append(pageTitle)
 
-    imageRoutine(cleanImageList)
+    return cleanImageList
+
+
+def main():
+    """
+    This defines and fills a global
+    variable for the site, and then gets
+    selection of images to work with from
+    Category:Wikipedia non-free file size reduction requests.
+    Then it runs image_routine() on this selection.
+    """
+    site.login(userpass.username, userpass.password)
+
+    downscaleList = getMembersForCategory("Wikipedia non-free file size reduction requests") + getMembersForCategory(
+        "Wikipedia non-free svg file size reduction requests"
+    )
+    imageRoutine(downscaleList, False, True)
+
+    upscaleListNonFree = getMembersForCategory(
+        "Wikipedia non-free SVG upscale requests"
+    )
+    imageRoutine(upscaleListNonFree, True, True)
+
+    upscaleListFree = getMembersForCategory("Wikipedia free SVG upscale requests")
+    imageRoutine(upscaleListFree, True, False)
+
     print("We're DONE!")
 
 

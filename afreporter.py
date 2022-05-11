@@ -460,7 +460,7 @@ def reportUser(targetUser: user.User, trippedFilter=None):
     if targetUser.isIP:
         reportLine = "\n* {{IPvandal|%s}} - " % targetUsername
     else:
-        reportLine = "\n* {{Vandal|%s}} - " % targetUsername
+        reportLine = "\n* {{Vandal|1=%s}} - " % targetUsername
 
     editSummary = "Reporting [[Special:Contributions/%s]]" % targetUsername
     if trippedFilter is None:

@@ -12,8 +12,8 @@ templateText = """{{#switch: {{{1}}}
   | sign = ~~~~~
   | info = %d pages according to [[User:DatBot|DatBot]]
 }}"""
-summaryText = "[[Wikipedia:Bots/Requests for approval/DatBot 4|Bot]] " \
-              "updating pending changes level to level {:d} ({:d} pages)"
+summaryText = "Updating pending changes level to level {:d} with {:d} pages " \ 
+              "([[Wikipedia:Bots/Requests for approval/DatBot 4|BOT]] - [[User:DatBot/Pending backlog/Run|disable]])"
 
 
 def getNumberOfPages():
@@ -30,7 +30,7 @@ def getNumberOfPages():
 
 def startAllowed():
     startPage = page.Page(site, 'User:DatBot/Pending backlog/Run')
-    return True if startPage.getWikiText() == "Run" else False
+    return startPage.getWikiText() == "Run"
 
 
 def convertPagesToLevel(pageAmount):
@@ -73,6 +73,9 @@ def main():
         # Wait until the next 15 interval
         # print("Sleeping {} minutes".format(15 - datetime.now().minute % 15))
         time.sleep((15 - datetime.now().minute % 15) * 60)
+
+        if not startAllowed():
+            continue
 
         rowAmount = getNumberOfPages()
         if editNecessary(rowAmount):

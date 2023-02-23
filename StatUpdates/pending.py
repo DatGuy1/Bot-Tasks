@@ -12,8 +12,8 @@ templateText = """{{#switch: {{{1}}}
   | sign = ~~~~~
   | info = %d pages according to [[User:DatBot|DatBot]]
 }}"""
-summaryText = "Updating pending changes level to level {:d} with {:d} pages " \ 
-              "([[Wikipedia:Bots/Requests for approval/DatBot 4|BOT]] - [[User:DatBot/Pending backlog/Run|disable]])"
+summaryText = "Updating pending changes level to level {:d} with {:d} pages " \
+              "([[Wikipedia:Bots/Requests for approval/DatBot 4|BOT]] - [[User:DatBot/run/task4|disable]])"
 
 
 def getNumberOfPages():
@@ -29,7 +29,7 @@ def getNumberOfPages():
 
 
 def startAllowed():
-    startPage = page.Page(site, 'User:DatBot/Pending backlog/Run')
+    startPage = page.Page(site, 'User:DatBot/run/task4')
     return startPage.getWikiText() == "Run"
 
 

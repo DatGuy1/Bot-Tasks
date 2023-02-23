@@ -1,21 +1,29 @@
 #! /usr/bin/env python
 import math
 import os
+import pathlib
 import re
 import subprocess
 import sys
 import uuid
-import xml.dom.minidom
 
+import defusedxml.minidom
 import pyexiv2
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageSequence, ImageOps, UnidentifiedImageError
+from PIL.Image import Resampling, Palette
 
+savePath = pathlib.Path(__file__).parent.resolve() / "files"
 
-# sys.path.append("/data/project/datbot/Tasks/NonFreeImageResizer")
 # svgMatch = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*(px|in|cm|mm|pt|pc|%)?")
 
 # CC-BY-SA Theopolisme, DatGuy
 # Task 3 on DatBot
+
+def generateThumbnails(frames, size):
+    for frame in frames:
+        thumbnail = frame.copy()
+        thumbnail.thumbnail(size, Resampling.LANCZOS, 3.0)
+        yield thumbnail
 
 def calculateNewSize(origWidth, origHeight):
     newWidth = math.sqrt((100000.0 * origWidth) / origHeight)
@@ -57,16 +65,19 @@ def updateMetadata(sourcePath, destPath, image):
     """
     This function moves the metadata
     from the old image to the new, reduced
-    image using pyexiv2.
+    image using Pillow (previously pyexiv2).
     """
-    sourceImage = pyexiv2.metadata.ImageMetadata(sourcePath)
-    sourceImage.read()
-    destImage = pyexiv2.metadata.ImageMetadata(destPath)
-    destImage.read()
-    sourceImage.copy(destImage)
-    destImage["Exif.Photo.PixelXDimension"] = image.size[0]
-    destImage["Exif.Photo.PixelYDimension"] = image.size[1]
-    destImage.write()
+    try:
+        sourceImage = pyexiv2.metadata.ImageMetadata(sourcePath)
+        sourceImage.read()
+        destImage = pyexiv2.metadata.ImageMetadata(destPath)
+        destImage.read()
+        sourceImage.copy(destImage)
+        destImage["Exif.Photo.PixelXDimension"] = image.size[0]
+        destImage["Exif.Photo.PixelYDimension"] = image.size[1]
+        destImage.write()
+    except TypeError:
+        pass
 
 
 def downloadImage(randomName, imagePage) -> str:
@@ -78,13 +89,10 @@ def downloadImage(randomName, imagePage) -> str:
 
     extension = os.path.splitext(imagePage.page_title)[1]
     extensionLower = extension[1:].lower()
-    fullName = randomName + extension
+    fullName = str(savePath / (randomName + extension))
     img = None
 
-    if extensionLower == "gif":
-        return "SKIP"
-
-    tempFile = str(uuid.uuid4()) + extension
+    tempFile = str(savePath / (str(uuid.uuid4()) + extension))
     with open(tempFile, "wb") as f:
         imagePage.download(f)
 
@@ -94,7 +102,7 @@ def downloadImage(randomName, imagePage) -> str:
         if extensionLower == "svg":
             # Get size
             useViewBox = False
-            docElement = xml.dom.minidom.parse(tempFile).documentElement
+            docElement = defusedxml.minidom.parse(tempFile).documentElement
 
             newWidth, newHeight, percentChange = calculateNewSize(oldWidth, oldHeight)
             if percentChange < 5:
@@ -102,6 +110,7 @@ def downloadImage(randomName, imagePage) -> str:
                     "Looks like we'd have a less than 5% change "
                     "in pixel counts. Skipping."
                 )
+                os.remove(tempFile)
                 return "PIXEL"
 
             svgWidth, svgHeight = GetSizeFromAttribute(docElement.getAttribute("width")), GetSizeFromAttribute(
@@ -109,14 +118,15 @@ def downloadImage(randomName, imagePage) -> str:
             )
 
             viewboxArray = re.split("[ ,\t]+", docElement.getAttribute("viewBox"))
+
             viewboxOffsetX, viewboxOffsetY = 0, 0
 
             if svgWidth is None or svgHeight is None:
                 useViewBox = True
-                viewboxOffsetX = float(viewboxArray[0] or 0)
-                viewboxOffsetY = float(viewboxArray[1] or 0)
-                svgWidth = float(viewboxArray[2] or 0)
-                svgHeight = float(viewboxArray[3] or 0)
+                viewboxOffsetX = float(viewboxArray[0] if len(viewboxArray) > 0 else 0)
+                viewboxOffsetY = float(viewboxArray[1] if len(viewboxArray) > 1 else 0)
+                svgWidth = float(viewboxArray[2] if len(viewboxArray) > 2 else 0)
+                svgHeight = float(viewboxArray[3] if len(viewboxArray) > 3 else 0)
 
             # If in different units
             # newWidth *= (svgWidth / oldWidth)
@@ -145,14 +155,24 @@ def downloadImage(randomName, imagePage) -> str:
                 f.write(docElement.toxml(encoding="utf-8"))
 
             # Condense file size
-            subprocess.check_call(["/data/project/datbot/svgcleaner/svgcleaner", fullName, fullName],
+            subprocess.run(["/data/project/datbot/svgcleaner/svgcleaner", fullName, fullName],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
         else:
-            img = Image.open(tempFile)
+            try:
+                img = ImageOps.exif_transpose(Image.open(tempFile))
+            except ValueError:
+                os.remove(tempFile)
+                return "BOMB"
+
             if (oldWidth * oldHeight) > 80000000:
                 img.close()
+                os.remove(tempFile)
                 return "BOMB"
+            elif (oldWidth * oldHeight) < 100000:
+                img.close()
+                os.remove(tempFile)
+                return "UPSCALE"
 
             newWidth, newHeight, percentChange = calculateNewSize(oldWidth, oldHeight)
 
@@ -161,36 +181,51 @@ def downloadImage(randomName, imagePage) -> str:
                 print(
                     "Looks like we'd have a less than 5% change in pixel counts. Skipping."
                 )
+                os.remove(tempFile)
                 return "PIXEL"
 
-            originalMode = img.mode
-            if originalMode in ["1", "L", "P"]:
-                img = img.convert("RGBA")
+            if extensionLower == "gif":
+                gifFrames = ImageSequence.Iterator(img)
+                gifFrames = generateThumbnails(gifFrames, (int(newWidth), int(newHeight)))
 
-            img = img.resize((int(newWidth), int(newHeight)), Image.LANCZOS)
-            if originalMode in ["1", "L", "P"]:
-                img = img.convert(originalMode, palette=Image.ADAPTIVE)
+                newGif = next(gifFrames) # First frame
+                newGif.info = img.info
+                newGif.save(fullName, save_all=True, append_images=list(gifFrames))
+            else:
+                originalMode = img.mode
+                if originalMode in ["1", "L", "P"]:
+                    img = img.convert("RGBA")
 
-            # 100 disables portions of the JPEG compression algorithm
-            img.save(fullName, **img.info, quality=100)
+                img = img.resize((int(newWidth), int(newHeight)), Resampling.LANCZOS)
+                if originalMode in ["1", "L", "P"]:
+                    img = img.convert(originalMode, palette=Palette.ADAPTIVE)
 
-    except UnidentifiedImageError as e:
+                # 100 disables portions of the JPEG compression algorithm
+                try:
+                    img.save(fullName, **img.info, quality=100)
+                except ValueError:
+                    img.save(fullName, **img.info)
+    except (UnidentifiedImageError, IOError) as e:
         print("Unable to open image {0} - aborting ({1})".format(imagePage.page_title, e))
+        os.remove(tempFile)
         return "ERROR"
-    except IOError as e:
-        print("Unable to open image {0} - aborting ({1})".format(imagePage.page_title, e))
-        return "ERROR"
+    except Exception as e:
+        errorText = "{}.{}: {}".format(type(e).__module__, type(e).__qualname__, e)
+        print("Unable to resize SVG {0} - aborting ({1})".format(imagePage.page_title, errorText))
+        os.remove(tempFile)
+        return "ERROR", errorText
+
 
     print("Image saved to disk at {0}{1}".format(randomName, extension))
 
-    if img is not None:
+    """
+    if img is not None and extensionLower != "gif":
         try:
             updateMetadata(tempFile, fullName, img)  # pyexiv2, see top
             print("Image EXIF data copied!")
         except (IOError, ValueError) as e:
             print("EXIF copy failed. Oh well - no pain, no gain. {0}".format(e))
+    """
 
-    filelist = [f for f in os.listdir(".") if f.startswith(tempFile)]
-    for fa in filelist:
-        os.remove(fa)
+    os.remove(tempFile)
     return fullName

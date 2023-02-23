@@ -1,7 +1,7 @@
 from wikitools import wiki, page, api
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import userpass
 
 site = wiki.Wiki()
@@ -15,7 +15,7 @@ templateText = """{{{{#switch: {{{{{{1}}}}}}
   | attribution = according to [[User:DatBot|DatBot]]
 }}}}"""
 summaryText = "Updating page triage stats: {:d} pages unreviewed " \
-              "([[Wikipedia:Bots/Requests for approval/DatBot 11|BOT]] - [[User:DatBot/Pending backlog/Run|disable]])"
+              "([[Wikipedia:Bots/Requests for approval/DatBot 11|BOT]] - [[User:DatBot/run/task11|disable]])"
 
 
 def FetchStats():
@@ -31,21 +31,23 @@ def FetchStats():
 
 
 def IsStartAllowed() -> bool:
-    return page.Page(site, 'User:DatBot/run/task11').getWikiText() == "Run"
+    return page.Page(site, 'User:DatBot/run/task11').getWikiText() == 'Run'
 
 
 def IsEditNecessary(totalPages: int, weeklyReviewed: int) -> bool:
-    totalPagesMatch = re.search(r'total_pages\s*=\s*(\d+)', updatePage.getWikiText())
+    pageText = updatePage.getWikiText()
+
+    totalPagesMatch = re.search(r'total_pages\s*=\s*(\d+)', pageText)
     if totalPagesMatch is not None:
         if int(totalPagesMatch.group(1)) != totalPages:
-            return False
+            return True
 
-    weeklyReviewedMatch = re.search(r'weekly_reviewed\s*=\s*(\d+)', updatePage.getWikiText())
+    weeklyReviewedMatch = re.search(r'weekly_reviewed\s*=\s*(\d+)', pageText)
     if weeklyReviewedMatch is not None:
         if int(weeklyReviewedMatch.group(1)) != weeklyReviewed:
-            return False
+            return True
 
-    return True
+    return False
 
 
 def UpdateTemplate(totalPages: int, weeklyReviewed: int) -> None:
@@ -61,9 +63,18 @@ def UpdateTemplate(totalPages: int, weeklyReviewed: int) -> None:
 
 def main():
     while True:
-        # Wait until the next 15 interval
-        # print("Sleeping {} minutes".format(15 - datetime.now().minute % 15))
-        time.sleep((15 - datetime.now().minute % 15) * 60)
+        # Wait until the next even-hour interval
+        nextEditTime = timeNow = datetime.utcnow()
+        if timeNow.hour % 2 == 0:
+            nextEditTime = timeNow + timedelta(hours=2)
+        else:
+            nextEditTime = timeNow + timedelta(hours=1)
+
+        nextEditTime = nextEditTime.replace(minute=0, second=0, microsecond=0)
+        waitTime = (nextEditTime - timeNow).total_seconds()
+
+        # print("Sleeping {:.0f} minutes".format(waitTime / 60))
+        time.sleep(waitTime)
 
         if not IsStartAllowed():
             continue
@@ -72,6 +83,7 @@ def main():
         if IsEditNecessary(totalPages, weeklyReviewed):
             UpdateTemplate(totalPages, weeklyReviewed)
 
+        return
 
 if __name__ == "__main__":
     main()

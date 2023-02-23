@@ -45,8 +45,9 @@ def getProjectList():
             # If we succesfully got the category name, get the actual name
             if categoryName is not None:
                 projects.append(categoryName.group("name"))
-        if "continue" not in res:  # If we're done, exit
+        if "continue" not in res:  # If we've iterated over all the pages, exit
             break
+
         params["cmcontinue"] = res["continue"]["cmcontinue"]
         req = api.APIRequest(site, params)
         res = req.query(False)

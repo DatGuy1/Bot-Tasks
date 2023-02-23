@@ -1,5 +1,3 @@
-# Filter reporter, DatBot task 3. Python 3.5, but lots of leftover Python2 code (e.g. string formatting)
-
 # -*- coding: utf-8 -*-
 # Copyright 2013 Alex Zaddach (mrzmanwiki@gmail.com). Derative work/modified by 'John Smith' (DatGuy)
 
@@ -20,7 +18,7 @@ import datetime
 import json
 import threading
 import time
-from functools import lru_cache
+from functools import cache
 from urllib.parse import quote
 
 import pymysql as MySQLdb
@@ -36,8 +34,11 @@ site = wiki.Wiki()
 site.setMaxlag(-1)
 site.login(userpass.username, userpass.password)
 
+SummarySuffix = " ([[WP:BOT|BOT]] - [[User:DatBot/Filter reporter/Run|disable]])"
+
 AIVPage = None
 UAAPage = None
+ErrorPage = page.Page(site, "User:DatBot/errors/afreporter")
 
 GlobalFilterHitQuota = 10
 GlobalFilterTime = 5
@@ -56,12 +57,6 @@ labsCursor = labsDB.cursor()
 
 
 class Filter:
-    filter_id = None
-    filter_name = ""
-    note = None
-    hits_required = None
-    time_expiry = None
-
     def __init__(self, filter_id, note="", hits_required=None, time_expiry=None):
         self.filter_id = filter_id
         self.filter_name = GetFilterName(filter_id)
@@ -289,11 +284,11 @@ def main():
     lastLagCheck = time.time()
 
     # values expire after ttl seconds
-    userTripTracker = TTLCache(maxsize=1000, ttl=300)
+    userTripTracker = TTLCache(maxsize=1000, ttl=GlobalFilterTime * 60)
     IRCreportTracker = TTLCache(maxsize=1000, ttl=60)
     titlesTracker = TTLCache(maxsize=1000, ttl=300)
 
-    AIVreportTracker = TTLCache(maxsize=1000, ttl=600)
+    AIVreportTracker = TTLCache(maxsize=1000, ttl=1800)
     AIVuserTracker = TimedTracker()
 
     (lastEditTime, lastEditId) = getStart(useAPI)
@@ -341,14 +336,8 @@ def main():
                 reportUserUAA(wikiUser, usernameDict[trippedFilter])
 
             # Is this necessary?
-            if title == "Special:UserLogin" or title == "UserLogin" or action == "createaccount":
-                continue
-
-            # Prevent multiple hits from the same edit attempt
-            if (targetUsername, timestamp) in filterHits:
-                pass # continue
-
-            filterHits.append((targetUsername, timestamp))
+            # if title == "Special:UserLogin" or title == "UserLogin" or action == "createaccount":
+            #     continue
 
             # Hits on pagemoves
             if action == "move":
@@ -358,17 +347,23 @@ def main():
                     % (targetUsername, str(logId))
                 )
 
-            # Five hits on one article in five minutes or less
+            # Ten hits on one article in five minutes or less
             titlesTracker[(pageNamespace, title)] = titlesTracker.get((pageNamespace, title), 0) + 1
-            if titlesTracker[(pageNamespace, title)] == 5 and (pageNamespace, title) not in IRCreportTracker:
+            if titlesTracker[(pageNamespace, title)] == 10 and (pageNamespace, title) not in IRCreportTracker:
                 p = page.Page(site, title, check=False, followRedirects=False, namespace=pageNamespace)
                 ircBot.send_message(
-                    "Five filters in the last five minutes have been tripped on %s: "
+                    "Ten filters in the last five minutes have been tripped on %s: "
                     "https://en.wikipedia.org/wiki/Special:AbuseLog?wpSearchTitle=%s"
                     % (p.title, p.urlTitle)
                 )
                 del titlesTracker[(pageNamespace, title)]
                 IRCreportTracker[(pageNamespace, title)] = True
+
+            # Prevent multiple hits from the same edit attempt
+            if (targetUsername, timestamp) in filterHits:
+                continue
+
+            filterHits.append((targetUsername, timestamp))
 
             # Check if the filter is in vandalism list
             if trippedFilter not in vandalismDict:
@@ -383,9 +378,9 @@ def main():
                     and targetUsername not in AIVreportTracker
             ):
                 ircBot.send_message(
-                    "User:%s has tripped %d filters within the last %d minutes: "
-                    "https://en.wikipedia.org/wiki/Special:AbuseLog?wpSearchUser=%s"
-                    % (targetUsername, userTripTracker[targetUsername], 5, quote(targetUsername))
+                    "Reporting User:%s to AIV for tripping disruption-catching filters %d times within "
+                    "the last %d minutes: https://en.wikipedia.org/wiki/Special:AbuseLog?wpSearchUser=%s"
+                    % (targetUsername, userTripTracker[targetUsername], GlobalFilterTime, quote(targetUsername))
                 )
                 del userTripTracker[targetUsername]
                 reportUser(wikiUser)
@@ -446,7 +441,7 @@ def reportUserUAA(targetUser: user.User, trippedFilter=None):
         }
 
     reportLine += " ~~~~"
-    editSummary += " ([[WP:BOT|BOT]] - [[User:DatBot/Filter reporter/Run|disable]])"
+    editSummary += SummarySuffix
 
     UAAPage.edit(appendtext=reportLine, summary=editSummary)
 
@@ -465,10 +460,11 @@ def reportUser(targetUser: user.User, trippedFilter=None):
     editSummary = "Reporting [[Special:Contributions/%s]]" % targetUsername
     if trippedFilter is None:
         reportLine += (
-                "Tripped %d abuse filters in the last %d minutes: "
+                "Tripped disruption-catching filters %d times in the last %d minutes "
                 "([{{fullurl:Special:AbuseLog|wpSearchUser=%s}} details])."
                 % (GlobalFilterHitQuota, GlobalFilterTime, quote(targetUsername))
         )
+        editSummary += f" for triggering disruption-catching filters {GlobalFilterHitQuota} times in the last {GlobalFilterTime} minutes"
     else:
         reportLine += (
                 "Tripped [[Special:AbuseFilter/%(f)s|filter %(f)s]] (%(n)s, "
@@ -483,12 +479,15 @@ def reportUser(targetUser: user.User, trippedFilter=None):
         )
 
     reportLine += " ~~~~"
-    editSummary += " ([[WP:BOT|BOT]] - [[User:DatBot/Filter reporter/Run|disable]])"
+    editSummary += SummarySuffix
 
-    AIVPage.edit(appendtext=reportLine, summary=editSummary)
+    try:
+        AIVPage.edit(appendtext=reportLine, summary=editSummary)
+    except Exception as e:
+        errorText = "\n#{}.{}: {}".format(type(e).__module__, type(e).__qualname__, e)
+        ErrorPage.edit(appendtext=errorText, summary="Reporting error " + SummarySuffix)
 
-
-@lru_cache(maxsize=64)
+@cache
 def GetFilterName(filterId):
     filterId = str(filterId)
 
@@ -506,7 +505,6 @@ def GetFilterName(filterId):
 
 
 def GetLists(ircBot):
-    # Globals not the best but eh why not
     global AIVPage, UAAPage, GlobalFilterHitQuota, GlobalFilterTime
 
     vandalismFilters = {}
@@ -519,14 +517,16 @@ def GetLists(ircBot):
         ircBot.send_message("Syntax error detected in filter list page - [[Template:DatBot filters]]")
         return vandalismFilters, usernameFilters
 
-    for filterId in pageJson["vandalism"]:
-        currentItem = pageJson["vandalism"][filterId]
-        vandalismFilters[filterId] = Filter(filter_id=filterId, note=currentItem.get("note"),
-            hits_required=currentItem.get("hits", 5), time_expiry=currentItem.get("time", 5) * 60
+    defaultTime = pageJson["defaults"].get("time", 5)
+    defaultHits = pageJson["defaults"].get("hits", 5)
+
+    for filterId, filterItem in pageJson["vandalism"].items():
+        vandalismFilters[filterId] = Filter(filter_id=filterId, note=filterItem.get("note"),
+            hits_required=filterItem.get("hits", defaultHits), time_expiry=filterItem.get("time", defaultTime) * 60
         )
 
-    for filterId in pageJson["username"]:
-        usernameFilters[filterId] = Filter(filter_id=filterId, note=pageJson["username"][filterId].get("note"))
+    for filterId, filterItem in pageJson["username"]:
+        usernameFilters[filterId] = Filter(filter_id=filterId, note=filterItem.get("note"))
 
     AIVPage = page.Page(site, pageJson.get("aiv", "Wikipedia:Administrator intervention against vandalism/TB2"))
     UAAPage = page.Page(site, pageJson.get("uaa", "Wikipedia:Usernames for administrator attention/Bot"))

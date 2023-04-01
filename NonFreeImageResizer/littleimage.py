@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import uuid
+from contextlib import suppress
 
 import defusedxml.minidom
 import pyexiv2
@@ -61,23 +62,28 @@ def GetSizeFromAttribute(attribute):
     return cutNumber
 
 
-def updateMetadata(sourcePath, destPath, image):
+def updateMetadata(sourcePath, destPath) -> None:
     """
     This function moves the metadata
     from the old image to the new, reduced
     image using Pillow (previously pyexiv2).
     """
+    sourceImage, destImage = None, None
     try:
-        sourceImage = pyexiv2.metadata.ImageMetadata(sourcePath)
-        sourceImage.read()
-        destImage = pyexiv2.metadata.ImageMetadata(destPath)
-        destImage.read()
-        sourceImage.copy(destImage)
-        destImage["Exif.Photo.PixelXDimension"] = image.size[0]
-        destImage["Exif.Photo.PixelYDimension"] = image.size[1]
-        destImage.write()
-    except TypeError:
-        pass
+        sourceImage = pyexiv2.Image(sourcePath)
+        destImage = pyexiv2.Image(destPath)
+    except RuntimeError:
+        if sourceImage is not None:
+            sourceImage.close()
+        return
+
+    with suppress(RuntimeError):
+        destImage.modify_exif(sourceImage.read_exif())
+        destImage.modify_xmp(sourceImage.read_xmp())
+        destImage.modify_iptc(sourceImage.read_iptc())
+
+    sourceImage.close()
+    destImage.close()
 
 
 def downloadImage(randomName, imagePage) -> str:
@@ -218,14 +224,11 @@ def downloadImage(randomName, imagePage) -> str:
 
     print("Image saved to disk at {0}{1}".format(randomName, extension))
 
-    """
-    if img is not None and extensionLower != "gif":
-        try:
-            updateMetadata(tempFile, fullName, img)  # pyexiv2, see top
-            print("Image EXIF data copied!")
-        except (IOError, ValueError) as e:
-            print("EXIF copy failed. Oh well - no pain, no gain. {0}".format(e))
-    """
+    if img is not None:
+        updateMetadata(tempFile, fullName)  # pyexiv2, see top
+        # img.save(ImageOps.exif_transpose(img), **img.info)  # Make sure its correctly orientated again
+        print("Image EXIF data copied!")
+        img.close()
 
     os.remove(tempFile)
     return fullName

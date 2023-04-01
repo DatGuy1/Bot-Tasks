@@ -51,15 +51,12 @@ def checkFinished(filesDone):
     return True
 
 
-def fileExists(imageTitle):
+def fileExists(imagePage):
     """This function makes sure that
     a given image is still tagged with
     {{non-free reduce}}.
     """
-    fullImage = "File:{0}".format(imageTitle)
-
-    page = site.Pages[fullImage]
-    pageText = page.text()
+    pageText = imagePage.text()
 
     for regexPhrase in regexList:
         if re.search(regexPhrase, pageText, flags=re.IGNORECASE) is not None:
@@ -70,13 +67,10 @@ def fileExists(imageTitle):
 
 def imageRoutine(imageList, upscaleTask, nonFree):
     filesDone = 0
-    for imageName in imageList:
-        print("Working on {0}".format(imageName))
+    for imagePage in imageList:
+        print("Working on {0}".format(imagePage.page_title))
         if checkFinished(filesDone):
-            if fileExists(imageName):
-                fullImageName = "File:{0}".format(imageName)
-                imagePage = site.Images[imageName]
-
+            if fileExists(imagePage):
                 randomName = str(uuid.uuid4())
                 fileResult = littleimage.downloadImage(randomName, imagePage)
 
@@ -84,7 +78,7 @@ def imageRoutine(imageList, upscaleTask, nonFree):
                     print("Decompression bomb warning")
                     errorText = ErrorPage.text()
                     errorText += "\n\n[[:{0}]] is probably a decompression bomb. Skipping. ~~~~~".format(
-                        fullImageName
+                        imagePage.name
                     )
 
                     ErrorPage.save(
@@ -126,8 +120,8 @@ def imageRoutine(imageList, upscaleTask, nonFree):
                 elif fileResult == "MISMATCH":
                     print("Size mismatch")
                     errorText = ErrorPage.text()
-                    errorText += "\n\nSize of [[:File:{0}]] is a mismatch between SVG and PNG. Skipping. ~~~~~".format(
-                        imageName
+                    errorText += "\n\nSize of [[:{0}]] is a mismatch between SVG and PNG. Skipping. ~~~~~".format(
+                        imagePage.name
                     )
 
                     ErrorPage.save(
@@ -146,7 +140,7 @@ def imageRoutine(imageList, upscaleTask, nonFree):
                 elif isinstance(fileResult, tuple) and fileResult[0] == "ERROR":
                     errorText = ErrorPage.text()
                     errorText += "\n\nError loading [[:{0}]]: {1}. Skipping. ~~~~~".format(
-                        fullImageName, fileResult[1]
+                        imagePage.name, fileResult[1]
                     )
 
                     ErrorPage.save(
@@ -160,7 +154,7 @@ def imageRoutine(imageList, upscaleTask, nonFree):
                     imagePage.save(
                         text,
                         summary="Changing template to Non-free manual reduce, "
-                                "error encountered when resizing file" + suffixStr,
+                                "error encountered when resizing file; see [[User:DatBot/errors/imageresizer]]" + suffixStr,
                     )
                 elif fileResult == "ERROR":
                     print("Image skipped.")
@@ -171,7 +165,7 @@ def imageRoutine(imageList, upscaleTask, nonFree):
                         # noinspection PyTypeChecker
                         site.upload(
                             open(fileResult, "rb"),
-                            imageName,
+                            imagePage.name,
                             (
                                 "Upscale SVG and cleanup SVG code"
                                 if upscaleTask
@@ -194,23 +188,20 @@ def imageRoutine(imageList, upscaleTask, nonFree):
                             text,
                             summary=("Tagging with {{[[Template:Orphaned non-free revisions|Orphaned non-free "
                                      "revisions]]}}, see [[WP:IMAGERES|instructions]] " if nonFree
-                                     else "Removing {{[["
-                                          "Template:SVG "
-                                          "upscale|SVG "
-                                          "upscale]]}}") + suffixStr,
+                                     else "Removing {{[[Template:SVG upscale|SVG upscale]]}}") + suffixStr,
                         )
 
                         print("Tagged!")
                     except Exception as e:
                         print("Unknown error. Image skipped.")
                         logger.error(
-                            "Unknown error; skipped {0} ({1})".format(imageName, e)
+                            "Unknown error; skipped {0} ({1})".format(imagePage.name, e)
                         )
                 
                     bot.deleteFile(fileResult)
             else:
                 print("Gah, looks like someone removed the tag.")
-                logger.error("Tag removed on image; skipped {0}".format(imageName))
+                logger.error("Tag removed on image; skipped {0}".format(imagePage.name))
         else:
             print("Ah, darn - looks like the bot was disabled.")
             sys.exit()
@@ -219,19 +210,13 @@ def imageRoutine(imageList, upscaleTask, nonFree):
 
 
 def getMembersForCategory(categoryName):
-    cleanImageList = []
-    print(categoryName)
+    print(f"Checking {categoryName}...")
+    # mwclient automatically converts from Page to Image if in file namespace
     sizeReductionCategory = mwclient.listing.Category(
         site, "Category:{0}".format(categoryName)
     )
-    sizeReductionRequests = sizeReductionCategory.members()
-
-    for image in sizeReductionRequests:
-        pageTitle = image.page_title
-        print(pageTitle)
-        cleanImageList.append(pageTitle)
-
-    return cleanImageList
+    sizeReductionRequests = sizeReductionCategory.members(namespace=6)
+    return list(sizeReductionRequests)
 
 
 def main():

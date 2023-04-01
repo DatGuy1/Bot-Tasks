@@ -19,12 +19,10 @@ site.login(userpass.username, userpass.password)
 
 
 def deleteFile(fileName):
-    fileList = [f for f in os.listdir(".") if f.startswith(fileName)]
-    for fileObject in fileList:
-        try:
-            fileObject.remove()
-        except:
-            os.remove(fileObject)
+    # fileList = [f for f in os.listdir(".") if f.startswith(fileName)]
+    # for fileObject in fileList:
+    if os.path.isfile(fileName):
+        os.remove(fileName)
 
 
 def canRun(page):

@@ -1,0 +1,31 @@
+# Start off by ignoring everything
+*
+!.gitignore
+
+# Unignore tasks
+!Tasks/
+!Tasks/**/*
+
+# Unignore setup
+!start_rust_task.sh
+!jobs.yaml
+!bootstrap_venv.sh
+!biglog.sh
+
+# Ignore cached stuff
+__pycache__/
+*.py[cod]
+files/
+
+# Ignore old tasks
+IRCChrissymad/
+IRC-SD/
+Footy/
+
+# Ignore task with other repository. This should probably be replaced as a submodule
+footy-league-updater/
+
+# Ignore sensitive authentication files
+userpass.py
+mwbot.toml
+replica.my.cnf

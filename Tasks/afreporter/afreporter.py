@@ -118,7 +118,6 @@ class CommandBot(SingleServerIRCBot):
         time.sleep(1)
         connection.join(self.channel)
         self.abuseChannel = connection
-        return
 
     def send_message(self, message: str):
         if self.abuseChannel is None:
@@ -273,10 +272,6 @@ def main():
     commandThread.daemon = True
     commandThread.start()
 
-    while len(ircBot.channels) < 1:
-        print("Channels not initialised, waiting")
-        time.sleep(4)
-
     vandalismDict, usernameDict = GetLists(ircBot)
     lastListCheck = time.time()
 
@@ -426,7 +421,7 @@ def reportUserUAA(targetUser: user.User, trippedFilter=None):
 
     targetUsername = targetUser.name
     reportLine = "\n*{{user-uaa|1=%s}} - " % targetUsername
-    editSummary = "Reporting [[Special:Contributions/%s]]" % targetUsername
+    editSummary = "Reporting [[Special:Contributions/{0}|{0}]]".format(targetUsername)
     if trippedFilter is not None:
         reportLine += "Tripped [[Special:AbuseFilter/%(f)s|filter %(f)s]] (%(n)s)." % {
             "f": trippedFilter.filter_id,

@@ -16,6 +16,7 @@
 __pycache__/
 *.py[cod]
 files/
+pageschecked.txt
 
 # Ignore old tasks
 IRCChrissymad/

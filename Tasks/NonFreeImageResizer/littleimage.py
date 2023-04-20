@@ -77,7 +77,7 @@ def updateMetadata(sourcePath, destPath) -> None:
             sourceImage.close()
         return
 
-    with suppress(RuntimeError):
+    with suppress(RuntimeError, UnicodeDecodeError):
         destImage.modify_exif(sourceImage.read_exif())
         destImage.modify_xmp(sourceImage.read_xmp())
         destImage.modify_iptc(sourceImage.read_iptc())
@@ -211,13 +211,13 @@ def downloadImage(randomName, imagePage) -> str:
                     img.save(fullName, **img.info, quality=100)
                 except ValueError:
                     img.save(fullName, **img.info)
-    except (UnidentifiedImageError, IOError) as e:
-        print("Unable to open image {0} - aborting ({1})".format(imagePage.page_title, e))
-        os.remove(tempFile)
-        return "ERROR"
+    # except (UnidentifiedImageError, IOError) as e:
+    #     print("Unable to open image {0} - aborting ({1})".format(imagePage.page_title, e))
+    #     os.remove(tempFile)
+    #     return "ERROR"
     except Exception as e:
         errorText = "{}.{}: {}".format(type(e).__module__, type(e).__qualname__, e)
-        print("Unable to resize SVG {0} - aborting ({1})".format(imagePage.page_title, errorText))
+        print("Unable to resize image {0} - aborting ({1})".format(imagePage.page_title, errorText))
         os.remove(tempFile)
         return "ERROR", errorText
 

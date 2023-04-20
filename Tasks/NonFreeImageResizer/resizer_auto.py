@@ -138,6 +138,8 @@ def imageRoutine(imageList, upscaleTask, nonFree):
                                 "size in data doesn't match Wikipedia's size" + suffixStr,
                     )
                 elif isinstance(fileResult, tuple) and fileResult[0] == "ERROR":
+                    logger.error(f"Skipped {imagePage.page_title}: {fileResult[1]}")
+                    print("Image skipped.")
                     errorText = ErrorPage.text()
                     errorText += "\n\nError loading [[:{0}]]: {1}. Skipping. ~~~~~".format(
                         imagePage.name, fileResult[1]
@@ -156,9 +158,6 @@ def imageRoutine(imageList, upscaleTask, nonFree):
                         summary="Changing template to Non-free manual reduce, "
                                 "error encountered when resizing file; see [[User:DatBot/errors/imageresizer]]" + suffixStr,
                     )
-                elif fileResult == "ERROR":
-                    print("Image skipped.")
-                    logger.error("Skipped {0}".format(imageName))
                 else:
                     try:
                         # What in the world is this autoformatting?

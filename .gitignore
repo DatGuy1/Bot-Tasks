@@ -12,6 +12,9 @@
 !bootstrap_venv.sh
 !biglog.sh
 
+# Unignore format configuration
+!pyproject.toml
+
 # Ignore cached stuff
 __pycache__/
 *.py[cod]

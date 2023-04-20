@@ -102,11 +102,8 @@ def getProjectStats(projectName):
 # Builds either the WP score or total articles, both use same format
 def printWPScoreOrTA(inputMasterArray):
     finalString = []
-    for (
-        projectNAS
-    ) in (
-        inputMasterArray
-    ):  # projectNAS contains the project name at the first index and the score for it at the second index, 'project name and score'
+    for projectNAS in inputMasterArray:
+    # projectNAS contains the project name at the first index and the score for it at the second index, 'project name and score'
         finalString.append(
             """{{#ifeq: {{{1|}}} | """
             + projectNAS[0]

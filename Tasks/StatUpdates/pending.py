@@ -69,7 +69,7 @@ def main() -> None:
     while True:
         # Wait until the next 15 minute interval
         # print("Sleeping {} minutes".format(15 - datetime.now().minute % 15))
-        # time.sleep((15 - datetime.now().minute % 15) * 60)
+        time.sleep((15 - datetime.now().minute % 15) * 60)
 
         if not IsStartAllowed():
             continue

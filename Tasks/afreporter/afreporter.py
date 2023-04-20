@@ -476,13 +476,14 @@ def reportUser(targetUser: user.User, trippedFilter: Optional[Filter] = None) ->
 
     editSummary = f"Reporting [[Special:Contributions/{targetUsername}]]"
     if trippedFilter is None:
+        formattedQuota = FormatOccurrences(GlobalFilterHitQuota)
         reportLine += (
-            "Tripped disruption-catching filters %d times in the last %d minutes "
+            "Tripped disruption-catching filters %sin the last %d minutes "
             "([{{fullurl:Special:AbuseLog|wpSearchUser=%s}} details])."
-            % (GlobalFilterHitQuota, GlobalFilterTime, quote(targetUsername))
+            % (formattedQuota, GlobalFilterTime, quote(targetUsername))
         )
         editSummary += (
-            f" for triggering disruption-catching filters {GlobalFilterHitQuota} times in the last "
+            f" for triggering disruption-catching filters {formattedQuota}in the last "
             f"{GlobalFilterTime} minutes"
         )
     else:

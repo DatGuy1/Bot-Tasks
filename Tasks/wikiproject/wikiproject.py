@@ -1,72 +1,76 @@
 # -*- coding: utf-8 -*-
+import pathlib
 import re
-import json
-import sys
-from wikitools import *
+
 import userpass
+
 import mwparserfromhell
+from wikitools import *
 
 site = wiki.Wiki()
 site.login(userpass.username, userpass.password)
-eTitles = ["Template:Infobox journal", "Template:Infobox magazine"]
-journalTitlesStart = "Infobox journal"
+
+RunPage = page.Page(site, "User:DatBot/run/task9")
+
+infoboxTemplates = {"journal": "Template:Infobox journal", "magazine": "Template:Infobox magazine"}
 journalStart = "WikiProject Academic Journals"
 magazineStart = "WikiProject Magazines"
 bannershellStart = "WikiProject banner shell"
 
-def fetchList(templateTitle):
-    returnList = [templateTitle]
-    params = {"action":"query",
-              "list":"backlinks",
-              "bltitle":"Template:{}".format(templateTitle),
-              "bllimit":"max",
-              "blfilterredir":"redirects",
-              "blnamespace":"10"
-              }
+
+def FetchWikiProjectTemplateNames(templateTitle: str) -> set[str]:
+    returnList = {templateTitle}
+    params = {
+        "action": "query",
+        "list": "backlinks",
+        "bltitle": f"Template:{templateTitle}",
+        "bllimit": "max",
+        "blfilterredir": "redirects",
+        "blnamespace": "10",
+    }
 
     for pageElement in api.APIRequest(site, params).query(False)["query"]["backlinks"]:
-        returnList.append("{{"+pageElement["title"][9:].lower())
+        returnList.add("{{" + pageElement["title"][9:].lower())
 
     return returnList
 
-def updateLists():
-    journalTitles = fetchList(journalTitlesStart)
-    journalProjects = fetchList(journalStart)
-    magazineProjects = fetchList(magazineStart)
-    bannershellWP = fetchList(bannershellStart)
 
-    return [journalTitles, journalProjects, magazineProjects, bannershellWP]
+def UpdateLists() -> tuple[set[str], set[str], set[str]]:
+    journalProjects = FetchWikiProjectTemplateNames(journalStart)
+    magazineProjects = FetchWikiProjectTemplateNames(magazineStart)
+    bannershellWP = FetchWikiProjectTemplateNames(bannershellStart)
 
-def startAllowed():
-    if page.Page(site, "User:DatBot/run/task9").getWikiText() != "true":
-        return False
-    else:
-        return True
+    return journalProjects, magazineProjects, bannershellWP
 
-def getEmbeds():
-    ePages1 = []
-    ePages2 = []
-    for pageTitle in eTitles:
-        params = {"action":"query",
-                  "list":"embeddedin",
-                  "eititle": pageTitle,
-                  "eilimit":"5000",
-                  "eifilterredir":"nonredirects",
-                  "einamespace":"0"
-                  }
+
+def IsStartAllowed() -> bool:
+    return RunPage.getWikiText(force=True) == "true"
+
+
+def GetEmbeds() -> tuple[set[str], set[str]]:
+    journalPages: set[str] = set()
+    magazinePages: set[str] = set()
+    for infoboxTemplate in infoboxTemplates.values():
+        params = {
+            "action": "query",
+            "list": "embeddedin",
+            "eititle": infoboxTemplate,
+            "eilimit": "5000",
+            "eifilterredir": "nonredirects",
+            "einamespace": "0",
+        }
         req = api.APIRequest(site, params)
         res = req.query(False)
-        length = len(res["query"]["embeddedin"])
+        numPages = len(res["query"]["embeddedin"])
 
-        while length >= 5000:
+        while numPages >= 5000:
             for pageName in res["query"]["embeddedin"]:
-                if pageTitle == "Template:Infobox journal":
-                    ePages1.append(pageName["title"])
-                else:
-                    ePages2.append(pageName["title"])
+                if infoboxTemplate == "Template:Infobox journal":
+                    journalPages.add(pageName["title"])
+                elif infoboxTemplate == "Template:Infobox magazine":
+                    magazinePages.add(pageName["title"])
 
-            length = len(res["query"]["embeddedin"])
-
+            numPages = len(res["query"]["embeddedin"])
             try:
                 params["eicontinue"] = res["continue"]["eicontinue"]
             except KeyError:
@@ -75,10 +79,11 @@ def getEmbeds():
             req = api.APIRequest(site, params)
             res = req.query(False)
 
-        return [ePages1, ePages2]
+        return journalPages, magazinePages
 
-def changePage(pageTitle, isJournal, originalPage, bannershellWP):
-    if not startAllowed():
+
+def EditPage(pageTitle: str, isJournal: bool, originalPage: str, bannershellWP: set[str]) -> None:
+    if not IsStartAllowed():
         print("no start")
         return
 
@@ -87,60 +92,65 @@ def changePage(pageTitle, isJournal, originalPage, bannershellWP):
     else:
         fileText = ""
 
-    if not allowBots(fileText):
+    if not BotAllowed(fileText, "DatBot"):
         return
 
     if isJournal:
-        stringAdd = "{{WikiProject Academic Journals|class=File}}"
-        transcludePage = eTitles[0]
+        wpToAdd = "{{WikiProject Academic Journals|class=File}}"
+        transcludePage = infoboxTemplates[0]
     else:
-        stringAdd = "{{WikiProject Magazines|class=File}}"
-        transcludePage = eTitles[1]
+        wpToAdd = "{{WikiProject Magazines|class=File}}"
+        transcludePage = infoboxTemplates[1]
 
     bannershellCheck = [s for s in bannershellWP if s in fileText]
 
     if len(bannershellCheck) > 0:
-        fileText = re.sub(r"({}.*\|1=)".format(bannershellCheck[0]), "\g<1>\n{}".format(stringAdd), fileText, re.IGNORECASE)
+        fileText = re.sub(
+            r"({}.*\|1=)".format(bannershellCheck[0]), r"\g<1>\n{}".format(wpToAdd), fileText, re.IGNORECASE
+        )
     else:
-        fileText = "{}\n".format(stringAdd + fileText)
+        fileText = "{}\n".format(wpToAdd + fileText)
 
-    editReason = "Adding {} because [[{}]] transcludes {} ([[Wikipedia:Bots/Requests for approval/DatBot 9|BOT]])".format(stringAdd, originalPage, transcludePage)
+    editReason = (
+        f"Adding {wpToAdd} because [[{originalPage}]] transcludes {transcludePage} "
+        f"([[Wikipedia:Bots/Requests for approval/DatBot 9|BOT]])"
+    )
     print(editReason)
 
     try:
-        page.Page(site, pageTitle).edit(text = fileText,
-                                        bot = True,
-                                        summary = editReason)
+        page.Page(site, pageTitle).edit(text=fileText, bot=True, summary=editReason)
     except Exception as e:
-        page.Page(site, "User:DatBot/pageerror").edit(
-            appendtext="\n\n[[{}]]: {}".format(originalPage, e),
-            bot = True,
-            summary = "Reporting error")
+        page.Page(site, "User:DatBot/errors/wikiproject").edit(
+            appendtext="\n\n[[{}]]: {}".format(originalPage, e), bot=True, summary="Reporting error"
+        )
 
-def main():
-    pagesChecked = ""
 
-    if not startAllowed():
+def main() -> None:
+    if not IsStartAllowed():
         print("no start")
         return
 
-    [journalTitles, journalProjects, magazineProjects, bannershellWP] = updateLists()
-    [ePages1, ePages2] = getEmbeds()
+    journalProjects, magazineProjects, bannershellWP = UpdateLists()
+    journalPages, magazinePages = GetEmbeds()
 
-    with open("/data/project/datbot/Tasks/wikiproject/pageschecked.txt", "r") as f:
+    pagesCheckedPath = pathlib.Path(__file__).parent / "pageschecked.txt"
+    with pagesCheckedPath.open("r") as f:
         pagesChecked = f.read()
 
-    appendFile = open("/data/project/datbot/Tasks/wikiproject/pageschecked.txt", "a")
-    for ePage in ePages1 + list(set(ePages2) - set(ePages1)):
-        if ePage in pagesChecked:
+    appendFile = pagesCheckedPath.open("a")
+    for pageWithInfobox in journalPages.union(magazinePages):
+        if pageWithInfobox in pagesChecked:
             continue
         else:
             try:
                 # https://regex101.com/r/BXBwby/1
-                fileName = re.findall(r"^\s*\|\s*(?:image|cover|image_file|logo)\s*=\s*(?:\[\[)?(?:(?:File|Image)\s*:\s*)?(\w[^\|<\]}{\n]*)",
-                          page.Page(site, ePage).getWikiText(), re.IGNORECASE | re.M)[0]
+                fileName = re.findall(
+                    r"^\s*\|\s*(?:image|cover|image_file|logo)\s*=\s*(?:\[\[)?(?:(?:File|Image)\s*:\s*)?(\w[^\|<\]}{\n]*)",  # noqa: E501
+                    page.Page(site, pageWithInfobox).getWikiText(),
+                    re.IGNORECASE | re.M,
+                )[0]
 
-                fileTalk = "File talk:{}".format(fileName)
+                fileTalk = f"File talk:{fileName}"
                 fileText = ""
                 talkObject = page.Page(site, fileTalk)
 
@@ -149,30 +159,35 @@ def main():
                         fileText = talkObject.getWikiText()
                 except Exception as e:
                     page.Page(site, "User:DatBot/pageerror").edit(
-                    appendtext="\n\n[[{}]]: {}".format(ePage, e),
-                    bot = True,
-                    summary = "Reporting error")
+                        appendtext=f"\n\n[[{pageWithInfobox}]]: {e}. ~~~~~", bot=True, summary="Reporting error"
+                    )
                     continue
 
-                if ePage in ePages1:
+                if pageWithInfobox in journalPages:
                     if any(pageElement in fileText.lower() for pageElement in journalProjects):
+                        # If any journal WikiProject templates are already there. Maybe switch this to category check?
                         raise IndexError
 
-                    changePage(fileTalk, True, ePage, bannershellWP)
+                    EditPage(fileTalk, True, pageWithInfobox, bannershellWP)
 
-                if ePage in ePages2:
+                if pageWithInfobox in magazinePages:
                     if any(pageElement in fileText.lower() for pageElement in magazineProjects):
+                        # If any magazine WikiProject templates are already there. Maybe switch this to category check?
                         raise IndexError
 
-                    changePage(fileTalk, False, ePage, bannershellWP)
+                    EditPage(fileTalk, False, pageWithInfobox, bannershellWP)
 
             except IndexError:
                 pass
-            appendFile.write("{}\n".format(ePage)) # all refreshed monthly
+
+            appendFile.write("{}\n".format(pageWithInfobox))  # all refreshed monthly
     appendFile.close()
 
-def allowBots(text):
-    user = "datbot"
+
+@property
+def BotAllowed(text: str, botName: str) -> bool:
+    botName = botName.lower()
+
     text = mwparserfromhell.parse(text)
     for tl in text.filter_templates():
         if tl.name.matches(["bots", "nobots"]):
@@ -182,18 +197,21 @@ def allowBots(text):
     for param in tl.params:
         bots = [x.lower().strip() for x in param.value.split(",")]
         if param.name == "allow":
-            if "".join(bots) == "none": return False
+            if "".join(bots) == "none":
+                return False
             for bot in bots:
-                if bot in (user, "all"):
+                if bot in (botName, "all"):
                     return True
         elif param.name == "deny":
-            if "".join(bots) == "none": return True
+            if "".join(bots) == "none":
+                return True
             for bot in bots:
-                if bot in (user, "all"):
+                if bot in (botName, "all"):
                     return False
-    if (tl.name.matches("nobots") and len(tl.params) == 0):
+    if tl.name.matches("nobots") and len(tl.params) == 0:
         return False
     return True
+
 
 if __name__ == "__main__":
     main()

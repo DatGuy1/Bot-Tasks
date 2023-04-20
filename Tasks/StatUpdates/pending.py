@@ -1,39 +1,41 @@
-from wikitools import wiki, page, api
 import re
 import time
 from datetime import datetime
+
 import userpass
+
+from wikitools import api, page, wiki
 
 site = wiki.Wiki()
 site.login(userpass.username, userpass.password)
-updatePage = page.Page(site, 'User:DatBot/pendingbacklog')
-templateText = """{{#switch: {{{1}}}
-  | level = %d
+
+RunPage = page.Page(site, "User:DatBot/run/task4")
+UpdatePage = page.Page(site, "User:DatBot/pendingbacklog")
+TemplateText = """{{{{#switch: {{{{{{1}}}}}}
+  | level = {level:d}}
   | sign = ~~~~~
-  | info = %d pages according to [[User:DatBot|DatBot]]
+  | info = {num_pages} pages according to [[User:DatBot|DatBot]]
 }}"""
-summaryText = "Updating pending changes level to level {:d} with {:d} pages " \
-              "([[Wikipedia:Bots/Requests for approval/DatBot 4|BOT]] - [[User:DatBot/run/task4|disable]])"
+SummaryText = (
+    "Updating pending changes level to level {:d} with {:d} pages "
+    "([[Wikipedia:Bots/Requests for approval/DatBot 4|BOT]] - [[User:DatBot/run/task4|disable]])"
+)
 
 
-def getNumberOfPages():
-    params = {'action': 'query',
-              'list': 'oldreviewedpages',
-              'orlimit': 'max',
-              'ordir': 'newer',
-              }
+def GetNumberOfPages() -> int:
+    params = {"action": "query", "list": "oldreviewedpages", "orlimit": "max", "ordir": "newer"}
     req = api.APIRequest(site, params)
     res = req.query(False)
 
-    return len(res['query']['oldreviewedpages'])
+    return len(res["query"]["oldreviewedpages"])
 
 
-def startAllowed():
-    startPage = page.Page(site, 'User:DatBot/run/task4')
-    return startPage.getWikiText() == "Run"
+def IsStartAllowed() -> bool:
+    return RunPage.getWikiText(force=True) == "Run"
 
 
-def convertPagesToLevel(pageAmount):
+def ConvertPagesToLevel(pageAmount: int) -> int:
+    # TODO: Switch to match once Toolforge supports it
     if pageAmount <= 3:
         return 5
     elif pageAmount <= 7:
@@ -46,9 +48,8 @@ def convertPagesToLevel(pageAmount):
         return 1
 
 
-def editNecessary(pageAmount):
-    currentPageAmountMatch = re.search(
-        r'info\s*=\s*(\d+)', updatePage.getWikiText())
+def IsEditNecessary(pageAmount: int) -> bool:
+    currentPageAmountMatch = re.search(r"info\s*=\s*(\d+)", UpdatePage.getWikiText())
     if currentPageAmountMatch is not None:
         currentPageAmount = int(currentPageAmountMatch.group(1))
         return currentPageAmount != pageAmount
@@ -56,30 +57,26 @@ def editNecessary(pageAmount):
     return True
 
 
-def updateTemplate(pageAmount):
-    backlogLevel = convertPagesToLevel(pageAmount)
-    newText = templateText % (backlogLevel, pageAmount)
-    updatePage.edit(
-        text=newText,
-        summary=summaryText.format(backlogLevel, pageAmount),
-        bot=True
-    )
+def UpdateTemplate(pageAmount: int) -> None:
+    backlogLevel = ConvertPagesToLevel(pageAmount)
+    newText = TemplateText.format(level=backlogLevel, num_pages=pageAmount)
+    UpdatePage.edit(text=newText, summary=SummaryText.format(backlogLevel, pageAmount), bot=True)
 
-    updatePage.purge(forcerecursivelinkupdate=True)
+    UpdatePage.purge(forcerecursivelinkupdate=True)
 
 
-def main():
+def main() -> None:
     while True:
-        # Wait until the next 15 interval
+        # Wait until the next 15 minute interval
         # print("Sleeping {} minutes".format(15 - datetime.now().minute % 15))
         time.sleep((15 - datetime.now().minute % 15) * 60)
 
-        if not startAllowed():
+        if not IsStartAllowed():
             continue
 
-        rowAmount = getNumberOfPages()
-        if editNecessary(rowAmount):
-            updateTemplate(rowAmount)
+        rowAmount = GetNumberOfPages()
+        if IsEditNecessary(rowAmount):
+            UpdateTemplate(rowAmount)
 
 
 if __name__ == "__main__":

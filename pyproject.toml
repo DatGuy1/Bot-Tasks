@@ -7,4 +7,6 @@ skip_magic_trailing_comma = true
 profile = "black"
 combine_as_imports = true
 line_length = 120
-
+known_first_party = "userpass"
+known_typing = "typing"
+sections = ["FUTURE", "TYPING", "STDLIB", "FIRSTPARTY", "THIRDPARTY", "LOCALFOLDER"]

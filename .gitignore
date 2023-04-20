@@ -12,14 +12,16 @@
 !bootstrap_venv.sh
 !biglog.sh
 
-# Unignore format configuration
+# Unignore formatting configuration
 !pyproject.toml
+!.flake8
 
 # Ignore cached stuff
 __pycache__/
 *.py[cod]
 files/
 pageschecked.txt
+resizer_auto.log
 
 # Ignore old tasks
 IRCChrissymad/

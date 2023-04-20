@@ -1,17 +1,20 @@
-#! /usr/bin/env python
+from typing import TYPE_CHECKING, Any, Optional, Union
+
 import math
 import os
 import pathlib
 import re
 import subprocess
-import sys
 import uuid
 from contextlib import suppress
 
 import defusedxml.minidom
+import mwclient.image
 import pyexiv2
-from PIL import Image, ImageSequence, ImageOps, UnidentifiedImageError
-from PIL.Image import Resampling, Palette
+from PIL import Image, ImageOps, ImageSequence
+
+if TYPE_CHECKING:
+    import xml.dom.minidom
 
 savePath = pathlib.Path(__file__).parent.resolve() / "files"
 
@@ -20,13 +23,15 @@ savePath = pathlib.Path(__file__).parent.resolve() / "files"
 # CC-BY-SA Theopolisme, DatGuy
 # Task 3 on DatBot
 
-def generateThumbnails(frames, size):
+
+def generateThumbnails(frames: ImageSequence.Iterator, size: tuple[int, int]):
     for frame in frames:
         thumbnail = frame.copy()
-        thumbnail.thumbnail(size, Resampling.LANCZOS, 3.0)
+        thumbnail.thumbnail(size, Image.LANCZOS, 3.0)
         yield thumbnail
 
-def calculateNewSize(origWidth, origHeight):
+
+def calculateNewSize(origWidth: int, origHeight: int):
     newWidth = math.sqrt((100000.0 * origWidth) / origHeight)
     widthPercent = newWidth / origWidth
     newHeight = origHeight * widthPercent
@@ -37,7 +42,7 @@ def calculateNewSize(origWidth, origHeight):
     return newWidth, newHeight, percentChange
 
 
-def GetSizeFromAttribute(attribute):
+def GetSizeFromAttribute(attribute: Any) -> Optional[float]:
     # If we can instantly convert, go ahead
     try:
         cutNumber = float(attribute)
@@ -62,7 +67,7 @@ def GetSizeFromAttribute(attribute):
     return cutNumber
 
 
-def updateMetadata(sourcePath, destPath) -> None:
+def updateMetadata(sourcePath: pathlib.Path, destPath: pathlib.Path) -> None:
     """
     This function moves the metadata
     from the old image to the new, reduced
@@ -70,8 +75,8 @@ def updateMetadata(sourcePath, destPath) -> None:
     """
     sourceImage, destImage = None, None
     try:
-        sourceImage = pyexiv2.Image(sourcePath)
-        destImage = pyexiv2.Image(destPath)
+        sourceImage = pyexiv2.Image(str(sourcePath))
+        destImage = pyexiv2.Image(str(destPath))
     except RuntimeError:
         if sourceImage is not None:
             sourceImage.close()
@@ -86,37 +91,36 @@ def updateMetadata(sourcePath, destPath) -> None:
     destImage.close()
 
 
-def downloadImage(randomName, imagePage) -> str:
+# TODO: Cleanup the return value
+def downloadImage(randomName: str, imagePage: mwclient.image.Image) -> Union[pathlib.Path, str, tuple[str, str]]:
     """
     This function creates the new image, runs
     metadata(), and passes along the new image's
     random name.
     """
-
-    extension = os.path.splitext(imagePage.page_title)[1]
+    extension: str = os.path.splitext(imagePage.page_title)[1]
     extensionLower = extension[1:].lower()
-    fullName = str(savePath / (randomName + extension))
-    img = None
+    fullName = (savePath / randomName).with_suffix(extension)
+    img: Optional[Image] = None
 
-    tempFile = str(savePath / (str(uuid.uuid4()) + extension))
-    with open(tempFile, "wb") as f:
+    tempFile = savePath / (str(uuid.uuid4()) + extension)
+    with tempFile.open("wb") as f:
         imagePage.download(f)
 
+    oldWidth: int
+    oldHeight: int
     oldWidth, oldHeight = imagePage.imageinfo["width"], imagePage.imageinfo["height"]
     try:
         # Maybe move this all to seperate functions?
         if extensionLower == "svg":
             # Get size
             useViewBox = False
-            docElement = defusedxml.minidom.parse(tempFile).documentElement
+            docElement: xml.dom.minidom.Element = defusedxml.minidom.parse(tempFile).documentElement
 
             newWidth, newHeight, percentChange = calculateNewSize(oldWidth, oldHeight)
             if percentChange < 5:
-                print(
-                    "Looks like we'd have a less than 5% change "
-                    "in pixel counts. Skipping."
-                )
-                os.remove(tempFile)
+                print(f"Looks like we'd have less than 5% change in pixel counts ({percentChange}). Skipping.")
+                tempFile.unlink()
                 return "PIXEL"
 
             svgWidth, svgHeight = GetSizeFromAttribute(docElement.getAttribute("width")), GetSizeFromAttribute(
@@ -143,68 +147,58 @@ def downloadImage(randomName, imagePage) -> str:
             docElement.setAttribute("height", str(newHeight))
 
             if useViewBox:
-                docElement.setAttribute(
-                    "viewBox",
-                    "{} {} {} {}".format(
-                        viewboxOffsetX, viewboxOffsetY, svgWidth, svgHeight
-                    ),
-                )
+                docElement.setAttribute("viewBox", f"{viewboxOffsetX} {viewboxOffsetY} {svgWidth} {svgHeight}")
             elif len(viewboxArray) == 0 or (len(viewboxArray) == 1 and viewboxArray[0] == ""):
-                docElement.setAttribute(
-                    "viewBox",
-                    "0 0 {} {}".format(
-                        svgWidth, svgHeight
-                    ),
-                )
+                docElement.setAttribute("viewBox", f"0 0 {svgWidth} {svgHeight}")
 
-            with open(fullName, "wb") as f:
+            with fullName.open("wb") as f:
                 f.write(docElement.toxml(encoding="utf-8"))
 
             # Condense file size
-            subprocess.run(["/data/project/datbot/svgcleaner/svgcleaner", fullName, fullName],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            subprocess.run(
+                ["/data/project/datbot/svgcleaner/svgcleaner", str(fullName), str(fullName)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
         else:
             try:
-                img = ImageOps.exif_transpose(Image.open(tempFile))
+                img: Image = ImageOps.exif_transpose(Image.open(tempFile))
             except ValueError:
-                os.remove(tempFile)
+                tempFile.unlink()
                 return "BOMB"
 
             if (oldWidth * oldHeight) > 80000000:
                 img.close()
-                os.remove(tempFile)
+                tempFile.unlink()
                 return "BOMB"
             elif (oldWidth * oldHeight) < 100000:
                 img.close()
-                os.remove(tempFile)
+                tempFile.unlink()
                 return "UPSCALE"
 
             newWidth, newHeight, percentChange = calculateNewSize(oldWidth, oldHeight)
-
             if percentChange < 5:
                 img.close()
-                print(
-                    "Looks like we'd have a less than 5% change in pixel counts. Skipping."
-                )
-                os.remove(tempFile)
+                print("Looks like we'd have a less than 5% change in pixel counts. Skipping.")
+                tempFile.unlink()
                 return "PIXEL"
 
             if extensionLower == "gif":
                 gifFrames = ImageSequence.Iterator(img)
                 gifFrames = generateThumbnails(gifFrames, (int(newWidth), int(newHeight)))
 
-                newGif = next(gifFrames) # First frame
+                newGif: Image = next(gifFrames)  # First frame
                 newGif.info = img.info
                 newGif.save(fullName, save_all=True, append_images=list(gifFrames))
             else:
-                originalMode = img.mode
+                # https://pillow.readthedocs.io/en/stable/handbook/concepts.html#concept-modes
+                originalMode: str = img.mode
                 if originalMode in ["1", "L", "P"]:
                     img = img.convert("RGBA")
 
-                img = img.resize((int(newWidth), int(newHeight)), Resampling.LANCZOS)
+                img = img.resize((int(newWidth), int(newHeight)), Image.LANCZOS)
                 if originalMode in ["1", "L", "P"]:
-                    img = img.convert(originalMode, palette=Palette.ADAPTIVE)
+                    img = img.convert(originalMode, palette=Image.ADAPTIVE)
 
                 # 100 disables portions of the JPEG compression algorithm
                 try:
@@ -218,17 +212,15 @@ def downloadImage(randomName, imagePage) -> str:
     except Exception as e:
         errorText = "{}.{}: {}".format(type(e).__module__, type(e).__qualname__, e)
         print("Unable to resize image {0} - aborting ({1})".format(imagePage.page_title, errorText))
-        os.remove(tempFile)
+        tempFile.unlink()
         return "ERROR", errorText
 
-
-    print("Image saved to disk at {0}{1}".format(randomName, extension))
-
+    print(f"Image saved to disk at {randomName}{extension}")
     if img is not None:
         updateMetadata(tempFile, fullName)  # pyexiv2, see top
         # img.save(ImageOps.exif_transpose(img), **img.info)  # Make sure its correctly orientated again
         print("Image EXIF data copied!")
         img.close()
 
-    os.remove(tempFile)
+    tempFile.unlink()
     return fullName

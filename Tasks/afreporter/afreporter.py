@@ -20,6 +20,7 @@ import threading
 import time
 from functools import cache
 from urllib.parse import quote
+from num2words import num2words
 
 import pymysql as MySQLdb
 import userpass
@@ -42,6 +43,8 @@ ErrorPage = page.Page(site, "User:DatBot/errors/afreporter")
 
 GlobalFilterHitQuota = 10
 GlobalFilterTime = 5
+
+DefaultFilterTime = 5
 
 configParser = configparser.ConfigParser()
 configParser.read("/data/project/datbot/replica.my.cnf")
@@ -174,6 +177,16 @@ def checkLag(ircBot):
 
     return useAPI
 
+def FormatOccurrences(occurrences: int) -> str:
+    # TODO: Switch to `match` once Python 3.10 is supported
+    if occurrences == 1:
+        return ""
+    elif occurrences == 2:
+        return "twice "
+    else:
+        wordRepresentation = num2words(occurrences, lang="en-GB")
+        return f"{wordRepresentation} times "
+
 
 def getStart(useAPI):
     if useAPI:
@@ -220,7 +233,8 @@ def logFromAPI(lastEditTime):
     res = req.query(False)
     rows = res["query"]["abuselog"]
     if len(rows) > 0:
-        del rows[0]  # The API uses >=, so the first row will be the same as the last row of the last set
+        # The API uses >=, so the first row will be the same as the last row of the last set
+        del rows[0]
 
     returnList = []
     for row in rows:
@@ -241,8 +255,8 @@ def logFromAPI(lastEditTime):
 def logFromDB(lastid):
     labsCursor.execute(
         """SELECT SQL_NO_CACHE afl_id, afl_action, afl_namespace, afl_title, 
-    afl_user_text, afl_timestamp, afl_filter_id FROM abuse_filter_log
-    WHERE afl_id > %s ORDER BY afl_id """
+        afl_user_text, afl_timestamp, afl_filter_id FROM abuse_filter_log
+        WHERE afl_id > %s ORDER BY afl_id """
         % lastid
     )
 
@@ -318,6 +332,7 @@ def main():
 
             targetUsername = wikiUser.name
             if not checkStartAllowed():
+                print("Start disabled, exiting...")
                 time.sleep(60)
                 break
 
@@ -354,48 +369,46 @@ def main():
                 del titlesTracker[(pageNamespace, title)]
                 IRCreportTracker[(pageNamespace, title)] = True
 
+            # Check if the filter is in vandalism list
+            if trippedFilter not in vandalismDict:
+                continue
+ 
+            # Check for filter hits_required
+            trippedFilterObject = vandalismDict[trippedFilter]
+            numTrips = AIVuserTracker.get((targetUsername, trippedFilterObject), 0) + 1
+
+            AIVuserTracker[(targetUsername, trippedFilterObject)] = numTrips
+            if numTrips >= trippedFilterObject.hits_required and targetUsername not in AIVreportTracker:
+                messageToSend = "Reporting https://en.wikipedia.org/wiki/Special:Contributions/{} to AIV for tripping https://en.wikipedia.org/wiki/Special:AbuseFilter/{}".format(targetUsername.replace(" ", "_"), trippedFilterObject.filter_id)
+                if numTrips > 0:
+                    formattedOccurences = FormatOccurences(numTrips)
+                    messageToSend += f"{formattedOccurences}within the last {trippedFilterObject.time_expiry / 60} minutes"
+                ircBot.send_message(messageToSend)
+
+                del AIVuserTracker[(targetUsername, trippedFilterObject)]
+                reportUser(wikiUser, trippedFilterObject)
+                AIVreportTracker[targetUsername] = True
+
             # Prevent multiple hits from the same edit attempt
             if (targetUsername, timestamp) in filterHits:
                 continue
 
             filterHits.append((targetUsername, timestamp))
 
-            # Check if the filter is in vandalism list
-            if trippedFilter not in vandalismDict:
-                continue
-
             # Generic trip reporting checks
             userTripTracker[targetUsername] = userTripTracker.get(targetUsername, 0) + 1
             # GlobalFilterHitQuota hits in GlobalFilterTime minutes
             if (
-                    userTripTracker[targetUsername] >= GlobalFilterHitQuota
-                    and trippedFilter in vandalismDict
-                    and targetUsername not in AIVreportTracker
+                userTripTracker[targetUsername] >= GlobalFilterHitQuota
+                and trippedFilter in vandalismDict
+                and targetUsername not in AIVreportTracker
             ):
                 ircBot.send_message(
-                    "Reporting User:%s to AIV for tripping disruption-catching filters %d times within "
-                    "the last %d minutes: https://en.wikipedia.org/wiki/Special:AbuseLog?wpSearchUser=%s"
-                    % (targetUsername, userTripTracker[targetUsername], GlobalFilterTime, quote(targetUsername))
+                    "Reporting User:{} to AIV for tripping disruption-catching filters {}within "
+                    "the last {} minutes: https://en.wikipedia.org/wiki/Special:AbuseLog?wpSearchUser={}".format(targetUsername, FormatOccurrences(userTripTracker[targetUsername]), GlobalFilterTime, quote(targetUsername))
                 )
                 del userTripTracker[targetUsername]
                 reportUser(wikiUser)
-                AIVreportTracker[targetUsername] = True
-
-            trippedFilterObject = vandalismDict[trippedFilter]
-            numTrips = AIVuserTracker.get((targetUsername, trippedFilterObject), 0) + 1
-
-            AIVuserTracker[(targetUsername, trippedFilterObject)] = numTrips
-            if numTrips >= trippedFilterObject.hits_required and targetUsername not in AIVreportTracker:
-                ircBot.send_message(
-                    "Reporting https://en.wikipedia.org/wiki/Special:Contributions/{} to AIV for tripping "
-                    "https://en.wikipedia.org/wiki/Special:AbuseFilter/{} {} times within the last {} minutes".format(
-                        targetUsername.replace(" ", "_"), trippedFilterObject.filter_id, numTrips,
-                        trippedFilterObject.time_expiry / 60
-                    )
-                )
-
-                del AIVuserTracker[(targetUsername, trippedFilterObject)]
-                reportUser(wikiUser, trippedFilterObject)
                 AIVreportTracker[targetUsername] = True
 
         if rows:
@@ -455,22 +468,23 @@ def reportUser(targetUser: user.User, trippedFilter=None):
     editSummary = "Reporting [[Special:Contributions/%s]]" % targetUsername
     if trippedFilter is None:
         reportLine += (
-                "Tripped disruption-catching filters %d times in the last %d minutes "
+            "Tripped disruption-catching filters %d times in the last %d minutes "
                 "([{{fullurl:Special:AbuseLog|wpSearchUser=%s}} details])."
-                % (GlobalFilterHitQuota, GlobalFilterTime, quote(targetUsername))
+            % (GlobalFilterHitQuota, GlobalFilterTime, quote(targetUsername))
         )
         editSummary += f" for triggering disruption-catching filters {GlobalFilterHitQuota} times in the last {GlobalFilterTime} minutes"
     else:
+        filterOccurrences = FormatOccurrences(trippedFilter.hits_required)
         reportLine += (
-                "Tripped [[Special:AbuseFilter/%(f)s|filter %(f)s]] (%(n)s, "
+            "Tripped [[Special:AbuseFilter/%(f)s|filter %(f)s]] %(occurrences)%(timeframe)s(%(n)s, "
                 "[{{fullurl:Special:AbuseLog|wpSearchUser=%(h)s}} details])."
-                % {"f": trippedFilter.filter_id, "n": trippedFilter.filter_name, "h": quote(targetUsername)}
+            % {"f": trippedFilter.filter_id, "occurrences": filterOccurrences, "timeframe": f"in the last {trippedFilter.time_expiry / 60} minutes " if trippedFilter.time_expiry != DefaultFilterTime else "", "n": trippedFilter.filter_name, "h": quote(targetUsername)}
         )
         if trippedFilter.note is not None:
             reportLine += " Note: {}.".format(trippedFilter.note)
 
-        editSummary += " for triggering [[Special:AbuseFilter/{filter_id}|filter {filter_id}]]".format(
-            filter_id=trippedFilter.filter_id
+        editSummary += " for triggering [[Special:AbuseFilter/{filter_id}|filter {filter_id}]] {filterOccurrences}".format(
+            filter_id=trippedFilter.filter_id, filterOccurrences=filterOccurrences.strip()
         )
 
     reportLine += " ~~~~"
@@ -479,7 +493,7 @@ def reportUser(targetUser: user.User, trippedFilter=None):
     try:
         AIVPage.edit(appendtext=reportLine, summary=editSummary)
     except Exception as e:
-        errorText = "\n#{}.{}: {}".format(type(e).__module__, type(e).__qualname__, e)
+        errorText = "\n#{}.{}: {} ~~~~~".format(type(e).__module__, type(e).__qualname__, e)
         ErrorPage.edit(appendtext=errorText, summary="Reporting error " + SummarySuffix)
 
 @cache
@@ -500,7 +514,7 @@ def GetFilterName(filterId):
 
 
 def GetLists(ircBot):
-    global AIVPage, UAAPage, GlobalFilterHitQuota, GlobalFilterTime
+    global AIVPage, UAAPage, DefaultFilterTime, GlobalFilterHitQuota, GlobalFilterTime
 
     vandalismFilters = {}
     usernameFilters = {}
@@ -512,13 +526,13 @@ def GetLists(ircBot):
         ircBot.send_message("Syntax error detected in filter list page - [[Template:DatBot filters]]")
         return vandalismFilters, usernameFilters
 
-    defaultTime = pageJson["defaults"].get("time", 5)
+    DefaultFilterTime = pageJson["defaults"].get("time", 5)
     defaultHits = pageJson["defaults"].get("hits", 5)
 
     for filterId, filterItem in pageJson["vandalism"].items():
         vandalismFilters[filterId] = Filter(filter_id=filterId, note=filterItem.get("note"),
-            hits_required=filterItem.get("hits", defaultHits), time_expiry=filterItem.get("time", defaultTime) * 60
-        )
+                                            hits_required=filterItem.get("hits", defaultHits), time_expiry=filterItem.get("time", DefaultFilterTime) * 60
+                                            )
 
     for filterId, filterItem in pageJson["username"]:
         usernameFilters[filterId] = Filter(filter_id=filterId, note=filterItem.get("note"))

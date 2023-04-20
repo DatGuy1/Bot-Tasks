@@ -483,8 +483,7 @@ def reportUser(targetUser: user.User, trippedFilter: Optional[Filter] = None) ->
             % (formattedQuota, GlobalFilterTime, quote(targetUsername))
         )
         editSummary += (
-            f" for triggering disruption-catching filters {formattedQuota}in the last "
-            f"{GlobalFilterTime} minutes"
+            f" for triggering disruption-catching filters {formattedQuota}in the last {GlobalFilterTime} minutes"
         )
     else:
         filterOccurrences = FormatOccurrences(trippedFilter.hits_required)

@@ -44,7 +44,7 @@ site = wiki.Wiki()
 site.setMaxlag(-1)
 site.login(userpass.username, userpass.password)
 
-SummarySuffix = " ([[WP:BOT|BOT]] - [[User:DatBot/Filter reporter/Run|disable]])"
+SummarySuffix = " ([[Wikipedia:Bots/Requests for approval/DatBot 3|BOT]] - [[User:DatBot/Filter reporter/Run|disable]])"
 
 AIVPage: Optional[page.Page] = None
 UAAPage: Optional[page.Page] = None
@@ -393,7 +393,7 @@ def main() -> None:
                 if numTrips > 0:
                     formattedOccurences = FormatOccurrences(numTrips)
                     messageToSend += (
-                        f"{formattedOccurences}within the last {trippedFilterObject.time_expiry / 60} minutes"
+                        f" {formattedOccurences}within the last {trippedFilterObject.time_expiry / 60} minutes"
                     )
                 ircBot.send_message(messageToSend)
 
@@ -445,7 +445,7 @@ def reportUserUAA(targetUser: user.User, trippedFilter: Optional[Filter] = None)
         return
 
     targetUsername = targetUser.name
-    reportLine = "\n*{{user-uaa|1=%s}} - " % targetUsername
+    reportLine = "\n*{{user-uaa|1=%s}} – " % targetUsername
     editSummary = "Reporting [[Special:Contributions/{0}|{0}]]".format(targetUsername)
     if trippedFilter is not None:
         reportLine += "Tripped [[Special:AbuseFilter/{filter_id}|filter {filter_id}]] ({filter_name}).".format(
@@ -470,9 +470,9 @@ def reportUser(targetUser: user.User, trippedFilter: Optional[Filter] = None) ->
 
     targetUsername = targetUser.name
     if targetUser.isIP:
-        reportLine = "\n* {{IPvandal|%s}} - " % targetUsername
+        reportLine = "\n* {{IPvandal|%s}} – " % targetUsername
     else:
-        reportLine = "\n* {{Vandal|1=%s}} - " % targetUsername
+        reportLine = "\n* {{Vandal|1=%s}} – " % targetUsername
 
     editSummary = f"Reporting [[Special:Contributions/{targetUsername}]]"
     if trippedFilter is None:
@@ -486,12 +486,12 @@ def reportUser(targetUser: user.User, trippedFilter: Optional[Filter] = None) ->
             f" for triggering disruption-catching filters {formattedQuota}in the last {GlobalFilterTime} minutes"
         )
     else:
-        filterOccurrences = FormatOccurrences(trippedFilter.hits_required)
-        timeframeText = (
-            f"in the last {trippedFilter.time_expiry / 60} minutes "
-            if trippedFilter.time_expiry != DefaultFilterTime
-            else ""
-        )
+        filterOccurrences = ""
+        timeframeText = ""
+        if trippedFilter.hits_required > 1:
+            filterOccurrences = FormatOccurrences(trippedFilter.hits_required)
+            timeframeText = f"in the last {(trippedFilter.time_expiry / 60):g} minutes "
+
         reportLine += (
             "Tripped [[Special:AbuseFilter/{filter_id}|filter {filter_id}]] {occurrences}{timeframe}({filter_name}), "
             "[{{{{fullurl:Special:AbuseLog|wpSearchUser={escaped_username}}}}} details]).".format(

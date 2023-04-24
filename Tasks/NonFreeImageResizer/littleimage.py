@@ -12,6 +12,7 @@ import defusedxml.minidom
 import mwclient.image
 import pyexiv2
 from PIL import Image, ImageOps, ImageSequence
+from PIL.Image import Resampling, Palette
 
 if TYPE_CHECKING:
     import xml.dom.minidom
@@ -27,7 +28,7 @@ savePath = pathlib.Path(__file__).parent.resolve() / "files"
 def generateThumbnails(frames: ImageSequence.Iterator, size: tuple[int, int]):
     for frame in frames:
         thumbnail = frame.copy()
-        thumbnail.thumbnail(size, Image.LANCZOS, 3.0)
+        thumbnail.thumbnail(size, Resampling.LANCZOS, 3.0)
         yield thumbnail
 
 
@@ -115,7 +116,7 @@ def downloadImage(randomName: str, imagePage: mwclient.image.Image) -> Union[pat
         if extensionLower == "svg":
             # Get size
             useViewBox = False
-            docElement: xml.dom.minidom.Element = defusedxml.minidom.parse(tempFile).documentElement
+            docElement: xml.dom.minidom.Element = defusedxml.minidom.parse(str(tempFile)).documentElement
 
             newWidth, newHeight, percentChange = calculateNewSize(oldWidth, oldHeight)
             if percentChange < 5:
@@ -196,9 +197,9 @@ def downloadImage(randomName: str, imagePage: mwclient.image.Image) -> Union[pat
                 if originalMode in ["1", "L", "P"]:
                     img = img.convert("RGBA")
 
-                img = img.resize((int(newWidth), int(newHeight)), Image.LANCZOS)
+                img = img.resize((int(newWidth), int(newHeight)), Resampling.LANCZOS)
                 if originalMode in ["1", "L", "P"]:
-                    img = img.convert(originalMode, palette=Image.ADAPTIVE)
+                    img = img.convert(originalMode, palette=Palette.ADAPTIVE)
 
                 # 100 disables portions of the JPEG compression algorithm
                 try:

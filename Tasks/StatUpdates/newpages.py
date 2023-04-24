@@ -13,7 +13,7 @@ site.login(userpass.username, userpass.password)
 
 RunPage = page.Page(site, "User:DatBot/run/task11")
 UpdatePage = page.Page(site, "User:DatBot/newpagesbacklog")
-TemplateText = """<noinclude>total_pages and weekly_reviewed have been deprecated in favour of unreviewed_articles and weekly_reviewed_articles and will be removed in the future</noinclude>
+TemplateText = """
 {{{{#switch: {{{{{{1}}}}}}
   | unreviewed_articles = {unreviewed_articles:d}
   | unreviewed_redirects = {unreviewed_redirects:d}

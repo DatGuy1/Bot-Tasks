@@ -15,7 +15,7 @@ TemplateText = """{{{{#switch: {{{{{{1}}}}}}
   | level = {level:d}
   | sign = ~~~~~
   | info = {num_pages} pages according to [[User:DatBot|DatBot]]
-}}"""
+}}}}"""
 SummaryText = (
     "Updating pending changes level to level {:d} with {:d} pages "
     "([[Wikipedia:Bots/Requests for approval/DatBot 4|BOT]] - [[User:DatBot/run/task4|disable]])"

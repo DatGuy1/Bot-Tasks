@@ -78,7 +78,7 @@ def fileExists(imagePage: mwclient.page.Page) -> bool:
     return False
 
 
-def imageRoutine(imageList: set[mwclient.image.Image], upscaleTask: bool, nonFree: bool) -> None:
+def imageRoutine(imageList: list[mwclient.image.Image], upscaleTask: bool, nonFree: bool) -> None:
     filesDone = 0
     for imagePage in imageList:
         print(f"Working on {imagePage.page_title}")
@@ -205,12 +205,12 @@ def imageRoutine(imageList: set[mwclient.image.Image], upscaleTask: bool, nonFre
         filesDone += 1
 
 
-def getMembersForCategory(categoryName: str) -> set[mwclient.image.Image]:
+def getMembersForCategory(categoryName: str) -> list[mwclient.image.Image]:
     print(f"Checking {categoryName}...")
     # mwclient automatically converts from Page to Image if in file namespace
     sizeReductionCategory = mwclient.listing.Category(site, f"Category:{categoryName}")
     sizeReductionRequests = sizeReductionCategory.members(namespace=6)
-    return set(sizeReductionRequests)
+    return list(sizeReductionRequests)
 
 
 def main() -> None:
@@ -223,9 +223,7 @@ def main() -> None:
     """
     site.login(userpass.username, userpass.password)
 
-    downscaleList = getMembersForCategory("Wikipedia non-free file size reduction requests").union(
-        getMembersForCategory("Wikipedia non-free SVG file size reduction requests")
-    )
+    downscaleList = getMembersForCategory("Wikipedia non-free file size reduction requests") + getMembersForCategory("Wikipedia non-free SVG file size reduction requests")
     imageRoutine(downscaleList, False, True)
 
     upscaleListNonFree = getMembersForCategory("Wikipedia non-free SVG upscale requests")

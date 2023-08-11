@@ -11,7 +11,7 @@
   wait: true
 - name: afreporter
   image: tf-python39
-  command: pyvenv/bin/python /data/project/datbot/Tasks/afreporter/afreporter.py --endless
+  command: pyvenv/bin/python /data/project/datbot/Tasks/afreporter/afreporter.py
   continuous: true
 #   emails: onfailure
 - name: wikiproject

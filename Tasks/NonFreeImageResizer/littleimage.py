@@ -12,7 +12,7 @@ import defusedxml.minidom
 import mwclient.image
 import pyexiv2
 from PIL import Image, ImageOps, ImageSequence
-from PIL.Image import Resampling, Palette
+from PIL.Image import Palette, Resampling
 
 if TYPE_CHECKING:
     import xml.dom.minidom

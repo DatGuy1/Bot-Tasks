@@ -1,8 +1,6 @@
 from typing import Any, Dict
 
 import re
-import time
-from datetime import datetime, timedelta
 
 import userpass
 
@@ -13,11 +11,13 @@ site.login(userpass.username, userpass.password)
 
 RunPage = page.Page(site, "User:DatBot/run/task11")
 UpdatePage = page.Page(site, "User:DatBot/newpagesbacklog")
-TemplateText = """
-{{{{#switch: {{{{{{1}}}}}}
+TemplateText = """{{{{#switch: {{{{{{1}}}}}}
   | unreviewed_articles = {unreviewed_articles:d}
   | unreviewed_redirects = {unreviewed_redirects:d}
   | unreviewed_drafts = {unreviewed_drafts:d}
+  | oldest_article = {oldest_article}
+  | oldest_redirect = {oldest_redirect}
+  | oldest_draft = {oldest_draft}
   | weekly_reviewed_articles = {weekly_reviewed_articles:d}
   | weekly_reviewed_redirects = {weekly_reviewed_redirects:d}
   | timestamp = ~~~~~
@@ -39,6 +39,9 @@ def FetchStats() -> Dict[str, int]:
         "unreviewed_articles": pageStats["unreviewedarticle"]["count"],
         "unreviewed_redirects": pageStats["unreviewedredirect"]["count"],
         "unreviewed_drafts": pageStats["unrevieweddraft"]["count"],
+        "oldest_article": pageStats["unreviewedarticle"]["oldest"],
+        "oldest_redirect": pageStats["unreviewedredirect"]["oldest"],
+        "oldest_draft": pageStats["unrevieweddraft"]["oldest"],
         "weekly_reviewed_articles": pageStats["reviewedarticle"]["reviewed_count"],
         "weekly_reviewed_redirects": pageStats["reviewedredirect"]["reviewed_count"],
     }
@@ -75,29 +78,12 @@ def UpdateTemplate(newValues: Dict[str, int]) -> None:
 
 
 def main() -> None:
-    while True:
-        # Wait until the next even-hour interval
-        timeNow = datetime.utcnow()
-        if timeNow.hour % 2 == 0:
-            nextEditTime = timeNow + timedelta(hours=2)
-        else:
-            nextEditTime = timeNow + timedelta(hours=1)
+    if not IsStartAllowed():
+        return
 
-        nextEditTime = nextEditTime.replace(minute=0, second=0, microsecond=0)
-        waitTime = (nextEditTime - timeNow).total_seconds()
-
-        # print("Sleeping {:.0f} minutes".format(waitTime / 60))
-        time.sleep(waitTime)
-
-        if not IsStartAllowed():
-            continue
-
-        newValues = FetchStats()
-        if IsEditNecessary(newValues):
-            UpdateTemplate(newValues)
-
-        # I'm not really sure why there was a return call here. Hopefully it still works.
-        time.sleep(120)
+    newValues = FetchStats()
+    if IsEditNecessary(newValues):
+        UpdateTemplate(newValues)
 
 
 if __name__ == "__main__":

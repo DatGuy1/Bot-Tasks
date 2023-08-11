@@ -352,10 +352,6 @@ def main() -> None:
                 )
                 reportUserUAA(hitUser, trippedFilterObject)
 
-            # Is this necessary?
-            # if title == "Special:UserLogin" or title == "UserLogin" or action == "createaccount":
-            #     continue
-
             # Hits on pagemoves
             if filterHit.action == "move":
                 ircBot.send_message(
@@ -398,7 +394,7 @@ def main() -> None:
                 ircBot.send_message(messageToSend)
 
                 del AIVuserTracker[(hitUser, trippedFilterObject)]
-                reportUser(hitUser, trippedFilterObject)
+                reportUser(hitUser, filterHit, trippedFilterObject)
                 AIVreportTracker[hitUser] = True
 
             # Prevent multiple hits from the same edit attempt
@@ -425,7 +421,7 @@ def main() -> None:
                     )
                 )
                 del userTripTracker[hitUser]
-                reportUser(hitUser)
+                reportUser(hitUser, filterHit)
                 AIVreportTracker[hitUser] = True
 
         if len(filterHits) > 0:
@@ -464,7 +460,7 @@ def reportUserUAA(targetUser: user.User, trippedFilter: Optional[Filter] = None)
     UAAPage.edit(appendtext=reportLine, summary=editSummary)
 
 
-def reportUser(targetUser: user.User, trippedFilter: Optional[Filter] = None) -> None:
+def reportUser(targetUser: user.User, filterHit: FilterHit, trippedFilter: Optional[Filter] = None) -> None:
     if targetUser.isBlocked(force=True):
         return
 
@@ -474,6 +470,7 @@ def reportUser(targetUser: user.User, trippedFilter: Optional[Filter] = None) ->
     else:
         reportLine = "\n* {{Vandal|1=%s}} – " % targetUsername
 
+    fpLink = f"{{{{False positive other/Link|username={targetUsername}|description=Reported by DatBot to AIV/TB2"
     editSummary = f"Reporting [[Special:Contributions/{targetUsername}]]"
     if trippedFilter is None:
         formattedQuota = FormatOccurrences(GlobalFilterHitQuota)
@@ -486,28 +483,43 @@ def reportUser(targetUser: user.User, trippedFilter: Optional[Filter] = None) ->
             f" for triggering disruption-catching filters {formattedQuota}in the last {GlobalFilterTime} minutes"
         )
     else:
+        fpLink += f"|filterid={filterHit.filter_id}"
         filterOccurrences = ""
         timeframeText = ""
         if trippedFilter.hits_required > 1:
             filterOccurrences = FormatOccurrences(trippedFilter.hits_required)
             timeframeText = f"in the last {(trippedFilter.time_expiry / 60):g} minutes "
+        else:
+            fpLink += f"|logid={filterHit.hit_id}|page={filterHit.page.title}"
+
+        reportLine += "Tripped [[Special:AbuseFilter/{filter_id}|filter {filter_id}]] ".format(
+            filter_id=trippedFilter.filter_id
+        )
+        # [Tripped filter 1]
+
+        reportLine += filterOccurrences
+        # Tripped filter 1 [twice]
+
+        reportLine += timeframeText
+        # Tripped filter 1 twice [in the last 3 minutes]
 
         reportLine += (
-            "Tripped [[Special:AbuseFilter/{filter_id}|filter {filter_id}]] {occurrences}{timeframe}({filter_name}), "
-            "[{{{{fullurl:Special:AbuseLog|wpSearchUser={escaped_username}}}}} details]).".format(
-                filter_id=trippedFilter.filter_id,
-                filter_name=trippedFilter.filter_name,
-                occurrences=filterOccurrences,
-                timeframe=timeframeText,
-                escaped_username=quote(targetUsername),
+            "({filter_name}, [{{{{fullurl:Special:AbuseLog|wpSearchUser={escaped_username}}}}} details]).".format(
+                filter_name=trippedFilter.filter_name, escaped_username=quote(targetUsername)
             )
         )
+        # Tripped filter 1 twice in the last 3 minutes [(General test filter, details).]
+
         if trippedFilter.note is not None:
-            reportLine += f" Note: {trippedFilter.note}."
+            reportLine += f" Note: {trippedFilter.note.rstrip('.')}."
+        # Tripped filter 1 twice in the last 3 minutes (General test filter, details). [Note: Testing.]
 
         editSummary += " for triggering [[Special:AbuseFilter/{filter_id}|filter {filter_id}]] {occurrences}".format(
             filter_id=trippedFilter.filter_id, occurrences=filterOccurrences.strip()
         )
+
+    fpLink += "}}"
+    reportLine += f" {fpLink}."
 
     reportLine += " ~~~~"
     editSummary += SummarySuffix

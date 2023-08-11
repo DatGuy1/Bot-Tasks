@@ -29,13 +29,12 @@
   schedule: "0 00 * * *"
 - name: backlogupdater
   image: tf-python39
-  command: pyvenv/bin/python /data/project/datbot/Tasks/StatUpdates/pending.py --endless
-  continuous: true
-#   emails: onfailure
+  command: pyvenv/bin/python /data/project/datbot/Tasks/StatUpdates/pending.py
+  schedule: "*/15 * * * *"
 - name: pagetriageupdater
   image: tf-python39
-  command: pyvenv/bin/python /data/project/datbot/Tasks/StatUpdates/newpages.py --endless
-  continuous: true
+  command: pyvenv/bin/python /data/project/datbot/Tasks/StatUpdates/newpages.py
+  schedule: "0 */2 * * *"
 - name: clearchecked
   image: tf-bullseye-std
   no-filelog: true

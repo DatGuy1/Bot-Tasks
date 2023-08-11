@@ -1,6 +1,4 @@
 import re
-import time
-from datetime import datetime
 
 import userpass
 
@@ -66,17 +64,12 @@ def UpdateTemplate(pageAmount: int) -> None:
 
 
 def main() -> None:
-    while True:
-        # Wait until the next 15 minute interval
-        # print("Sleeping {} minutes".format(15 - datetime.now().minute % 15))
-        time.sleep((15 - datetime.now().minute % 15) * 60)
+    if not IsStartAllowed():
+        return
 
-        if not IsStartAllowed():
-            continue
-
-        rowAmount = GetNumberOfPages()
-        if IsEditNecessary(rowAmount):
-            UpdateTemplate(rowAmount)
+    rowAmount = GetNumberOfPages()
+    if IsEditNecessary(rowAmount):
+        UpdateTemplate(rowAmount)
 
 
 if __name__ == "__main__":

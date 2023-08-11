@@ -92,7 +92,7 @@ def EditPage(pageTitle: str, isJournal: bool, originalPage: str, bannershellWP: 
     else:
         fileText = ""
 
-    if not BotAllowed(fileText, "DatBot"):
+    if not IsBotAllowed(fileText, "DatBot"):
         return
 
     if isJournal:
@@ -184,8 +184,7 @@ def main() -> None:
     appendFile.close()
 
 
-@property
-def BotAllowed(text: str, botName: str) -> bool:
+def IsBotAllowed(text: str, botName: str) -> bool:
     botName = botName.lower()
 
     text = mwparserfromhell.parse(text)
@@ -194,6 +193,7 @@ def BotAllowed(text: str, botName: str) -> bool:
             break
     else:
         return True
+
     for param in tl.params:
         bots = [x.lower().strip() for x in param.value.split(",")]
         if param.name == "allow":
@@ -208,8 +208,10 @@ def BotAllowed(text: str, botName: str) -> bool:
             for bot in bots:
                 if bot in (botName, "all"):
                     return False
+
     if tl.name.matches("nobots") and len(tl.params) == 0:
         return False
+
     return True
 
 

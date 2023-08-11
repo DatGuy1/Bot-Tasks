@@ -223,7 +223,8 @@ def main() -> None:
     """
     site.login(userpass.username, userpass.password)
 
-    downscaleList = getMembersForCategory("Wikipedia non-free file size reduction requests") + getMembersForCategory("Wikipedia non-free SVG file size reduction requests")
+    downscaleList = getMembersForCategory("Wikipedia non-free file size reduction requests")
+    downscaleList += getMembersForCategory("Wikipedia non-free SVG file size reduction requests")
     imageRoutine(downscaleList, False, True)
 
     upscaleListNonFree = getMembersForCategory("Wikipedia non-free SVG upscale requests")

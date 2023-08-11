@@ -4,3 +4,5 @@ per-file-ignores =
   *.py: E501
   Tasks/afreporter/afreporter.py: F403, F405
   Tasks/wikiproject/wikiproject.py: F403, F405
+exclude =
+  Tasks/Footy

@@ -50,7 +50,7 @@ def IsStartAllowed() -> bool:
 def GetEmbeds() -> tuple[set[str], set[str]]:
     journalPages: set[str] = set()
     magazinePages: set[str] = set()
-    for infoboxTemplate in infoboxTemplates.values():
+    for templateType, infoboxTemplate in infoboxTemplates.items():
         params = {
             "action": "query",
             "list": "embeddedin",
@@ -65,9 +65,9 @@ def GetEmbeds() -> tuple[set[str], set[str]]:
 
         while numPages >= 5000:
             for pageName in res["query"]["embeddedin"]:
-                if infoboxTemplate == "Template:Infobox journal":
+                if templateType == "journal":
                     journalPages.add(pageName["title"])
-                elif infoboxTemplate == "Template:Infobox magazine":
+                elif templateType == "magazine":
                     magazinePages.add(pageName["title"])
 
             numPages = len(res["query"]["embeddedin"])
@@ -97,10 +97,10 @@ def EditPage(pageTitle: str, isJournal: bool, originalPage: str, bannershellWP: 
 
     if isJournal:
         wpToAdd = "{{WikiProject Academic Journals|class=File}}"
-        transcludePage = infoboxTemplates[0]
+        transcludePage = infoboxTemplates["journal"]
     else:
         wpToAdd = "{{WikiProject Magazines|class=File}}"
-        transcludePage = infoboxTemplates[1]
+        transcludePage = infoboxTemplates["magazine"]
 
     bannershellCheck = [s for s in bannershellWP if s in fileText]
 

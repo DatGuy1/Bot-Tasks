@@ -84,7 +84,10 @@ def updateMetadata(sourcePath: pathlib.Path, destPath: pathlib.Path) -> None:
         return
 
     with suppress(RuntimeError, UnicodeDecodeError):
-        destImage.modify_exif(sourceImage.read_exif())
+        imageExif = sourceImage.read_exif()
+        # Remove 'Orientation' since we exif_transpose-d it earlier
+        imageExif.pop("Exif.Image.Orientation", None)
+        destImage.modify_exif(imageExif)
         destImage.modify_xmp(sourceImage.read_xmp())
         destImage.modify_iptc(sourceImage.read_iptc())
 
@@ -218,10 +221,9 @@ def downloadImage(randomName: str, imagePage: mwclient.image.Image) -> Union[pat
 
     print(f"Image saved to disk at {randomName}{extension}")
     if img is not None:
-        updateMetadata(tempFile, fullName)  # pyexiv2, see top
-        # img.save(ImageOps.exif_transpose(img), **img.info)  # Make sure its correctly orientated again
-        print("Image EXIF data copied!")
         img.close()
+        updateMetadata(tempFile, fullName)  # pyexiv2, see top
+        print("Image EXIF data copied!")
 
     tempFile.unlink()
     return fullName

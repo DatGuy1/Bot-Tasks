@@ -10,6 +10,7 @@
 !start_rust_task.sh
 !jobs.yaml
 !bootstrap_venv.sh
+!bootstrap_venv39.sh
 !biglog.sh
 
 # Unignore formatting configuration

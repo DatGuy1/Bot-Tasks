@@ -1,47 +1,51 @@
 ---
 - name: clearlog
   command: /data/project/datbot/biglog.sh
-  image: tf-bullseye-std
+  image: bullseye
   no-filelog: true
   schedule: "59 23 * * *"
   emails: onfailure
 - name: bootstrap-venv
-  image: tf-python39
+  image: python3.11
   command: ./bootstrap_venv.sh
   wait: true
+- name: bootstrap-venv39
+  image: python3.9
+  command: ./bootstrap_venv39.sh
+  wait: true
 - name: afreporter
-  image: tf-python39
+  image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/afreporter/afreporter.py
   continuous: true
 #   emails: onfailure
 - name: wikiproject
-  image: tf-python39
+  image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/wikiproject/wikiproject.py
   schedule: "0 00 * * *"
 - name: wikiwork
-  image: tf-python39
+  image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/wikiwork/wikiwork.py
   schedule: "0 00 * * *"
 - name: imageresizer
-  image: tf-python39
+  image: python3.9
   mem: 4Gi
-  command: pyvenv/bin/python /data/project/datbot/Tasks/NonFreeImageResizer/resizer_auto.py
+  command: py39/bin/python /data/project/datbot/Tasks/NonFreeImageResizer/resizer_auto.py
   schedule: "0 00 * * *"
 - name: backlogupdater
-  image: tf-python39
+  image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/StatUpdates/pending.py
   schedule: "*/15 * * * *"
 - name: pagetriageupdater
-  image: tf-python39
+  image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/StatUpdates/newpages.py
   schedule: "0 */2 * * *"
 - name: clearchecked
-  image: tf-bullseye-std
+  image: bullseye
   no-filelog: true
   command: echo '' > /data/project/datbot/Tasks/wikiproject/pageschecked.txt
   schedule: "0 0 1 * *"
 - name: footy-league-updater
-  image: tf-bullseye-std
+  image: bullseye
   mem: 1Gi
   command: "/data/project/datbot/start_rust_task.sh /data/project/datbot/Tasks/SportsStatsBot/footy-league-updater"
   schedule: "*/30 * * * *"

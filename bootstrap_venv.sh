@@ -17,10 +17,3 @@ pip install cachetools irc pymysql num2words
 
 # packages for wikiwork
 pip install mwparserfromhell
-
-# packages for imageresizer
-pip install defusedxml Pillow pyexiv2==2.5.0
-# anything above 2.5.0 requires GLIBC 2.29, ldd --version returns GLIBC 2.28. if GLIBC is bumped, switch to modify_raw_xmp()
-
-# mwclient for imageresizer
-pip install git+https://github.com/mwclient/mwclient.git

@@ -11,6 +11,7 @@ find "/data/project/datbot/Tasks/NonFreeImageResizer/files" -iname "*.jpeg" -typ
 find "/data/project/datbot/Tasks/NonFreeImageResizer/files" -iname "*.webp" -type f -delete
 find "/data/project/datbot/Tasks/NonFreeImageResizer/files" -iname "*.tif" -type f -delete
 find "/data/project/datbot/Tasks/NonFreeImageResizer/files" -iname "*.svg" -type f -delete
+find "/data/project/datbot/Tasks/NonFreeImageResizer/files" -iname "*.gif" -type f -delete
 sleep 3
 touch afreporter.err
 touch imageresizer.out

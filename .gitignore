@@ -13,6 +13,11 @@
 !bootstrap_venv39.sh
 !biglog.sh
 
+# Unignore logging
+!.lighttpd.conf
+!public_html/
+!public_html/**
+
 # Unignore formatting configuration
 !pyproject.toml
 !.flake8

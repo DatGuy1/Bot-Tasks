@@ -8,36 +8,52 @@
 - name: bootstrap-venv
   image: python3.11
   command: ./bootstrap_venv.sh
+  filelog-stdout: /data/project/datbot/logs/bootstrap-venv/stdout.log
+  filelog-stderr: /data/project/datbot/logs/bootstrap-venv/stderr.log
   wait: true
 - name: bootstrap-venv39
   image: python3.9
   command: ./bootstrap_venv39.sh
+  filelog-stdout: /data/project/datbot/logs/bootstrap-venv39/stdout.log
+  filelog-stderr: /data/project/datbot/logs/bootstrap-venv39/stderr.log
   wait: true
 - name: afreporter
   image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/afreporter/afreporter.py
+  filelog-stdout: /data/project/datbot/logs/afreporter/stdout.log
+  filelog-stderr: /data/project/datbot/logs/afreporter/stderr.log
   continuous: true
 #   emails: onfailure
 - name: wikiproject
   image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/wikiproject/wikiproject.py
+  filelog-stdout: /data/project/datbot/logs/wikiproject/stdout.log
+  filelog-stderr: /data/project/datbot/logs/wikiproject/stderr.log
   schedule: "0 00 * * *"
 - name: wikiwork
   image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/wikiwork/wikiwork.py
+  filelog-stdout: /data/project/datbot/logs/wikiwork/stdout.log
+  filelog-stderr: /data/project/datbot/logs/wikiwork/stderr.log
   schedule: "0 00 * * *"
 - name: imageresizer
   image: python3.9
   mem: 4Gi
   command: py39/bin/python /data/project/datbot/Tasks/NonFreeImageResizer/resizer_auto.py
+  filelog-stdout: /data/project/datbot/logs/imageresizer/stdout.log
+  filelog-stderr: /data/project/datbot/logs/imageresizer/stderr.log
   schedule: "0 00 * * *"
 - name: backlogupdater
   image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/StatUpdates/pending.py
+  filelog-stdout: /data/project/datbot/logs/backlogupdater/stdout.log
+  filelog-stderr: /data/project/datbot/logs/backlogupdater/stderr.log
   schedule: "*/15 * * * *"
 - name: pagetriageupdater
   image: python3.11
   command: pyvenv/bin/python /data/project/datbot/Tasks/StatUpdates/newpages.py
+  filelog-stdout: /data/project/datbot/logs/pagetriageupdater/stdout.log
+  filelog-stderr: /data/project/datbot/logs/pagetriageupdater/stderr.log
   schedule: "0 */2 * * *"
 - name: clearchecked
   image: bullseye
@@ -48,4 +64,6 @@
   image: bullseye
   mem: 1Gi
   command: "/data/project/datbot/start_rust_task.sh /data/project/datbot/Tasks/SportsStatsBot/footy-league-updater"
+  filelog-stdout: /data/project/datbot/logs/footy-league-updater/stdout.log
+  filelog-stderr: /data/project/datbot/logs/footy-league-updater/stderr.log
   schedule: "*/30 * * * *"

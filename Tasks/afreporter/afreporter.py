@@ -22,12 +22,12 @@ import datetime
 import json
 import threading
 import time
+import logging
 from dataclasses import dataclass
 from functools import cache
 from urllib.parse import quote
 
 import userpass
-
 import pymysql as MySQLdb
 from cachetools import TTLCache
 from irc.bot import ServerSpec, SingleServerIRCBot
@@ -39,6 +39,10 @@ if TYPE_CHECKING:
 
 IRCActive = False
 LogActive = False
+
+logging.basicConfig(filename='/data/project/datbot/logs/afreporter.log', format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger("afreporter")
+logger.setLevel(logging.DEBUG)
 
 site = wiki.Wiki()
 site.setMaxlag(-1)
@@ -184,10 +188,9 @@ class BotRunnerThread(threading.Thread):
         self.bot.start()
 
 
-def checkLag(ircBot: CommandBot) -> bool:
+def checkLag(ircBot: CommandBot, useAPI: bool) -> bool:
     """Returns whether to use the API"""
     lagWaitedOut = False
-    useAPI = False
 
     while True:
         # Check replication lag
@@ -200,9 +203,11 @@ def checkLag(ircBot: CommandBot) -> bool:
         if repLag > 300 and not useAPI:
             useAPI = True
             ircBot.send_message("Labs replag too high, falling back to API")
+            logger.info("Labs replag too high, falling back to API")
         if repLag < 120 and useAPI:
             useAPI = False
             ircBot.send_message("Using Labs database")
+            logger.info("Using Labs database")
 
         # Check maxlag if we're using the API
         if useAPI:
@@ -214,6 +219,7 @@ def checkLag(ircBot: CommandBot) -> bool:
             if maxLag > 600 and not lagWaitedOut:
                 lagWaitedOut = True
                 ircBot.send_message("Server lag too high, stopping reports")
+                logger.info("Server lag too high, stopping reports")
             if lagWaitedOut and maxLag > 120:
                 time.sleep(120)
                 continue
@@ -221,6 +227,7 @@ def checkLag(ircBot: CommandBot) -> bool:
 
     if lagWaitedOut:
         ircBot.send_message("Restarting reports")
+        logger.info("Restarting reports")
 
     return useAPI
 
@@ -290,6 +297,8 @@ def logFromDB(lastHitId: int) -> list[FilterHit]:
 
 
 def main() -> None:
+    logger.debug("afreporter loaded!")
+
     logChannel = "#wikipedia-en-abuse-log"
     logServer = "irc.libera.chat"
     botNickname = "DatBot"
@@ -301,7 +310,7 @@ def main() -> None:
     vandalismFilters, usernameFilters = GetLists(ircBot)
     lastListCheck = time.time()
 
-    useAPI = checkLag(ircBot)
+    useAPI = checkLag(ircBot, False)
     lastLagCheck = time.time()
 
     # values expire after ttl seconds
@@ -320,7 +329,7 @@ def main() -> None:
             vandalismFilters, usernameFilters = GetLists(ircBot)
             lastListCheck = timeNow
         if timeNow > lastLagCheck + 600:
-            useAPI = checkLag(ircBot)
+            useAPI = checkLag(ircBot, useAPI)
             lastLagCheck = timeNow
 
         registeredHits: list[tuple[user.User, str]] = []
@@ -330,7 +339,7 @@ def main() -> None:
                 continue
 
             if not StartAllowed:
-                print("Start disabled, exiting...")
+                logger.warning("Start disabled, exiting...")
                 time.sleep(60)
                 break
 
@@ -426,7 +435,7 @@ def main() -> None:
 
         if len(filterHits) > 0:
             lastHitId = filterHits[-1].hit_id
-            lastHitTime = filterHits[-1].filter_id
+            lastHitTime = filterHits[-1].timestamp
 
         time.sleep(1.5)
 
@@ -557,6 +566,7 @@ def GetLists(ircBot: CommandBot) -> tuple[dict[int, Filter], dict[int, Filter]]:
         pageJson = json.loads(filtersPage.getWikiText(force=True))
     except json.decoder.JSONDecodeError:
         ircBot.send_message("Syntax error detected in filter list page - [[Template:DatBot filters]]")
+        logger.error("Syntax error detected in filter list page - [[Template:DatBot filters]]")
         return vandalismFilters, usernameFilters
 
     DefaultFilterTime = pageJson["defaults"].get("time", 5)

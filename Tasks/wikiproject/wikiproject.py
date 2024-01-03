@@ -72,9 +72,9 @@ def GetEmbeds() -> tuple[set[page.Page], set[page.Page]]:
         while numPages > 0:
             for pageEntry in res["query"]["embeddedin"]:
                 if templateType == "journal":
-                    journalPages.add(page.Page(site, pageID=pageEntry["pageid"]))
+                    journalPages.add(page.Page(site, pageID=pageEntry["pageid"], check=False))
                 elif templateType == "magazine":
-                    magazinePages.add(page.Page(site, pageID=pageEntry["pageid"]))
+                    magazinePages.add(page.Page(site, pageID=pageEntry["pageid"], check=False))
 
             if "continue" not in res:
                 break
@@ -96,7 +96,8 @@ def EditPage(pageTitle: str, isJournal: bool, originalPage: page.Page, bannershe
         print("no start")
         return
 
-    if page.Page(site, pageTitle).exists:
+    filePage = page.Page(site, pageTitle)
+    if filePage.exists:
         fileText = page.Page(site, pageTitle).getWikiText()
     else:
         fileText = ""

@@ -11,13 +11,14 @@ from contextlib import suppress
 import defusedxml.minidom
 import mwclient.image
 import pyexiv2
-from PIL import Image, ImageOps, ImageSequence
+from PIL import Image, ImageFile, ImageOps, ImageSequence
 from PIL.Image import Palette, Resampling
 
 if TYPE_CHECKING:
     import xml.dom.minidom
 
-savePath = pathlib.Path(__file__).parent.resolve() / "files"
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+SavePath = pathlib.Path(__file__).parent.resolve() / "files"
 
 # svgMatch = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*(px|in|cm|mm|pt|pc|%)?")
 
@@ -104,10 +105,10 @@ def downloadImage(randomName: str, imagePage: mwclient.image.Image) -> Union[pat
     """
     extension: str = os.path.splitext(imagePage.page_title)[1]
     extensionLower = extension[1:].lower()
-    fullName = (savePath / randomName).with_suffix(extension)
+    fullName = (SavePath / randomName).with_suffix(extension)
     img: Optional[Image] = None
 
-    tempFile = savePath / (str(uuid.uuid4()) + extension)
+    tempFile = SavePath / (str(uuid.uuid4()) + extension)
     with tempFile.open("wb") as f:
         imagePage.download(f)
 

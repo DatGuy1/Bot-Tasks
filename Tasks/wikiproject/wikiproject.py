@@ -17,6 +17,12 @@ journalStart = "WikiProject Academic Journals"
 magazineStart = "WikiProject Magazines"
 bannershellStart = "WikiProject banner shell"
 
+# https://regex101.com/r/BXBwby/1
+FILE_NAME_RE = re.compile(r'^\s*\|\s*(?:image|cover|image_file|logo)\s*=\s*(?:\[\[)?(?:(?:File|Image)\s*:\s*)?(\w[^\|<\]}{\n]*)')  # noqa: E501
+
+
+class TagExistsError(Exception):
+    pass
 
 def FetchWikiProjectTemplateNames(templateTitle: str) -> set[str]:
     returnList = {templateTitle}
@@ -47,9 +53,9 @@ def IsStartAllowed() -> bool:
     return RunPage.getWikiText(force=True) == "true"
 
 
-def GetEmbeds() -> tuple[set[str], set[str]]:
-    journalPages: set[str] = set()
-    magazinePages: set[str] = set()
+def GetEmbeds() -> tuple[set[page.Page], set[page.Page]]:
+    journalPages: set[page.Page] = set()
+    magazinePages: set[page.Page] = set()
     for templateType, infoboxTemplate in infoboxTemplates.items():
         params = {
             "action": "query",
@@ -63,12 +69,15 @@ def GetEmbeds() -> tuple[set[str], set[str]]:
         res = req.query(False)
         numPages = len(res["query"]["embeddedin"])
 
-        while numPages >= 5000:
-            for pageName in res["query"]["embeddedin"]:
+        while numPages > 0:
+            for pageEntry in res["query"]["embeddedin"]:
                 if templateType == "journal":
-                    journalPages.add(pageName["title"])
+                    journalPages.add(page.Page(site, pageID=pageEntry["pageid"]))
                 elif templateType == "magazine":
-                    magazinePages.add(pageName["title"])
+                    magazinePages.add(page.Page(site, pageID=pageEntry["pageid"]))
+
+            if "continue" not in res:
+                break
 
             numPages = len(res["query"]["embeddedin"])
             try:
@@ -79,10 +88,10 @@ def GetEmbeds() -> tuple[set[str], set[str]]:
             req = api.APIRequest(site, params)
             res = req.query(False)
 
-        return journalPages, magazinePages
+    return journalPages, magazinePages
 
 
-def EditPage(pageTitle: str, isJournal: bool, originalPage: str, bannershellWP: set[str]) -> None:
+def EditPage(pageTitle: str, isJournal: bool, originalPage: page.Page, bannershellWP: set[str]) -> None:
     if not IsStartAllowed():
         print("no start")
         return
@@ -112,7 +121,7 @@ def EditPage(pageTitle: str, isJournal: bool, originalPage: str, bannershellWP: 
         fileText = "{}\n".format(wpToAdd + fileText)
 
     editReason = (
-        f"Adding {wpToAdd} because [[{originalPage}]] transcludes {transcludePage} "
+        f"Adding {wpToAdd} because [[{originalPage.title}]] transcludes {transcludePage} "
         f"([[Wikipedia:Bots/Requests for approval/DatBot 9|BOT]])"
     )
     print(editReason)
@@ -121,7 +130,7 @@ def EditPage(pageTitle: str, isJournal: bool, originalPage: str, bannershellWP: 
         page.Page(site, pageTitle).edit(text=fileText, bot=True, summary=editReason)
     except Exception as e:
         page.Page(site, "User:DatBot/errors/wikiproject").edit(
-            appendtext="\n\n[[{}]]: {}".format(originalPage, e), bot=True, summary="Reporting error"
+            appendtext="\n\n[[{}]]: {}. ~~~~~".format(originalPage, e), bot=True, summary="Reporting error"
         )
 
 
@@ -133,54 +142,50 @@ def main() -> None:
     journalProjects, magazineProjects, bannershellWP = UpdateLists()
     journalPages, magazinePages = GetEmbeds()
 
-    pagesCheckedPath = pathlib.Path(__file__).parent / "pageschecked.txt"
-    with pagesCheckedPath.open("r") as f:
-        pagesChecked = f.read()
+    pagesCheckedPath = pathlib.Path(__file__).parent / "pages_checked.txt"
+    with pagesCheckedPath.open("r", encoding="utf-8") as f:
+        pagesChecked = f.read().splitlines()
 
-    appendFile = pagesCheckedPath.open("a")
+    appendFile = pagesCheckedPath.open("a", encoding="utf-8")
+    pageWithInfobox: page.Page
     for pageWithInfobox in journalPages.union(magazinePages):
-        if pageWithInfobox in pagesChecked:
+        if pageWithInfobox.pageID in pagesChecked:
             continue
         else:
             try:
-                # https://regex101.com/r/BXBwby/1
-                fileName = re.findall(
-                    r"^\s*\|\s*(?:image|cover|image_file|logo)\s*=\s*(?:\[\[)?(?:(?:File|Image)\s*:\s*)?(\w[^\|<\]}{\n]*)",  # noqa: E501
-                    page.Page(site, pageWithInfobox).getWikiText(),
-                    re.IGNORECASE | re.M,
-                )[0]
+                fileName = FILE_NAME_RE.findall(pageWithInfobox.getWikiText(), re.IGNORECASE | re.M)[0]
 
                 fileTalk = f"File talk:{fileName}"
                 fileText = ""
-                talkObject = page.Page(site, fileTalk)
+                talkObject = page.Page(site, fileTalk, check=True)
 
                 try:
                     if talkObject.exists:
                         fileText = talkObject.getWikiText()
                 except Exception as e:
-                    page.Page(site, "User:DatBot/pageerror").edit(
-                        appendtext=f"\n\n[[{pageWithInfobox}]]: {e}. ~~~~~", bot=True, summary="Reporting error"
+                    page.Page(site, "User:DatBot/errors/wikiproject").edit(
+                        appendtext=f"\n\n[[{pageWithInfobox.title}]]: {e}. ~~~~~", bot=True, summary="Reporting error"
                     )
                     continue
 
                 if pageWithInfobox in journalPages:
                     if any(pageElement in fileText.lower() for pageElement in journalProjects):
                         # If any journal WikiProject templates are already there. Maybe switch this to category check?
-                        raise IndexError
+                        raise TagExistsError
 
                     EditPage(fileTalk, True, pageWithInfobox, bannershellWP)
 
                 if pageWithInfobox in magazinePages:
                     if any(pageElement in fileText.lower() for pageElement in magazineProjects):
                         # If any magazine WikiProject templates are already there. Maybe switch this to category check?
-                        raise IndexError
+                        raise TagExistsError
 
                     EditPage(fileTalk, False, pageWithInfobox, bannershellWP)
 
-            except IndexError:
+            except TagExistsError:
                 pass
 
-            appendFile.write("{}\n".format(pageWithInfobox))  # all refreshed monthly
+            appendFile.write("{}\n".format(pageWithInfobox.pageID))  # all refreshed monthly
     appendFile.close()
 
 

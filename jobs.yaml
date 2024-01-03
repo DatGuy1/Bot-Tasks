@@ -58,7 +58,7 @@
 - name: clearchecked
   image: bullseye
   no-filelog: true
-  command: echo '' > /data/project/datbot/Tasks/wikiproject/pageschecked.txt
+  command: echo '' > /data/project/datbot/Tasks/wikiproject/pages_checked.txt
   schedule: "0 0 1 * *"
 - name: footy-league-updater
   image: bullseye

@@ -18,14 +18,15 @@ magazineStart = "WikiProject Magazines"
 bannershellStart = "WikiProject banner shell"
 
 # https://regex101.com/r/BXBwby/1
-FILE_NAME_RE = re.compile(r'^\s*\|\s*(?:image|cover|image_file|logo)\s*=\s*(?:\[\[)?(?:(?:File|Image)\s*:\s*)?(\w[^\|<\]}{\n]*)')  # noqa: E501
+FILE_NAME_RE = re.compile(r'^\s*\|\s*(?:image|cover|image_file|logo)\s*=\s*(?:\[\[)?(?:(?:File|Image)\s*:\s*)?(\w[^|<\]}{\n]*)',  flags=re.IGNORECASE | re.M)  # noqa: E501
 
 
 class TagExistsError(Exception):
     pass
 
+
 def FetchWikiProjectTemplateNames(templateTitle: str) -> set[str]:
-    returnList = {templateTitle}
+    returnList = {"{{" + templateTitle.lower()}
     params = {
         "action": "query",
         "list": "backlinks",
@@ -71,10 +72,13 @@ def GetEmbeds() -> tuple[set[page.Page], set[page.Page]]:
 
         while numPages > 0:
             for pageEntry in res["query"]["embeddedin"]:
+                pageID = pageEntry["pageid"]
+                pageTitle = pageEntry["title"]
+                pageNs = pageEntry["ns"]
                 if templateType == "journal":
-                    journalPages.add(page.Page(site, pageID=pageEntry["pageid"], check=False))
+                    journalPages.add(page.Page(site, pageID=pageID, title=pageTitle, namespace=pageNs, check=False))
                 elif templateType == "magazine":
-                    magazinePages.add(page.Page(site, pageID=pageEntry["pageid"], check=False))
+                    magazinePages.add(page.Page(site, pageID=pageID, title=pageTitle, namespace=pageNs, check=False))
 
             if "continue" not in res:
                 break
@@ -91,14 +95,13 @@ def GetEmbeds() -> tuple[set[page.Page], set[page.Page]]:
     return journalPages, magazinePages
 
 
-def EditPage(pageTitle: str, isJournal: bool, originalPage: page.Page, bannershellWP: set[str]) -> None:
+def EditPage(filePage: page.Page, isJournal: bool, originalPage: page.Page, bannershellWP: set[str]) -> None:
     if not IsStartAllowed():
         print("no start")
         return
 
-    filePage = page.Page(site, pageTitle)
     if filePage.exists:
-        fileText = page.Page(site, pageTitle).getWikiText()
+        fileText = filePage.getWikiText()
     else:
         fileText = ""
 
@@ -128,7 +131,7 @@ def EditPage(pageTitle: str, isJournal: bool, originalPage: page.Page, bannershe
     print(editReason)
 
     try:
-        page.Page(site, pageTitle).edit(text=fileText, bot=True, summary=editReason)
+        filePage.edit(text=fileText, bot=True, summary=editReason)
     except Exception as e:
         page.Page(site, "User:DatBot/errors/wikiproject").edit(
             appendtext="\n\n[[{}]]: {}. ~~~~~".format(originalPage, e), bot=True, summary="Reporting error"
@@ -154,15 +157,26 @@ def main() -> None:
             continue
         else:
             try:
-                fileName = FILE_NAME_RE.findall(pageWithInfobox.getWikiText(), re.IGNORECASE | re.M)[0]
+                fileNameMatch = FILE_NAME_RE.search(pageWithInfobox.getWikiText())
+                if fileNameMatch is None:
+                    appendFile.write("{}\n".format(pageWithInfobox.pageID))
+                    continue
 
-                fileTalk = f"File talk:{fileName}"
+                fileName = fileNameMatch.group(1)
+
+                # File talk namespace
+                filePage = page.Page(site, fileName, namespace=7, check=False)
                 fileText = ""
-                talkObject = page.Page(site, fileTalk, check=True)
 
                 try:
-                    if talkObject.exists:
-                        fileText = talkObject.getWikiText()
+                    # File namespace
+                    if not page.Page(site, fileName, namespace=6).exists:
+                        appendFile.write("{}\n".format(pageWithInfobox.pageID))
+                        continue
+
+                    filePage.setPageInfo()
+                    if filePage.exists:
+                        fileText = filePage.getWikiText()
                 except Exception as e:
                     page.Page(site, "User:DatBot/errors/wikiproject").edit(
                         appendtext=f"\n\n[[{pageWithInfobox.title}]]: {e}. ~~~~~", bot=True, summary="Reporting error"
@@ -174,14 +188,14 @@ def main() -> None:
                         # If any journal WikiProject templates are already there. Maybe switch this to category check?
                         raise TagExistsError
 
-                    EditPage(fileTalk, True, pageWithInfobox, bannershellWP)
+                    EditPage(filePage, True, pageWithInfobox, bannershellWP)
 
                 if pageWithInfobox in magazinePages:
                     if any(pageElement in fileText.lower() for pageElement in magazineProjects):
                         # If any magazine WikiProject templates are already there. Maybe switch this to category check?
                         raise TagExistsError
 
-                    EditPage(fileTalk, False, pageWithInfobox, bannershellWP)
+                    EditPage(filePage, False, pageWithInfobox, bannershellWP)
 
             except TagExistsError:
                 pass

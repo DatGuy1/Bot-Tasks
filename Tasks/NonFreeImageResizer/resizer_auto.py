@@ -169,7 +169,7 @@ def imageRoutine(imageList: list[mwclient.image.Image], upscaleTask: bool, nonFr
                 else:
                     try:
                         uploadComment = (
-                            "Upscale SVG and cleanup SVG code" if upscaleTask else "Reduce size of non-free image"
+                            "Upscale SVG" if upscaleTask else "Reduce size of non-free image"
                         )
                         with fileResult.open("rb") as fileHandle:
                             # noinspection PyTypeChecker

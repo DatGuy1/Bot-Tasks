@@ -159,12 +159,12 @@ def downloadImage(randomName: str, imagePage: mwclient.image.Image) -> Union[pat
             with fullName.open("wb") as f:
                 f.write(docElement.toxml(encoding="utf-8"))
 
-            # Condense file size
+            """# Condense file size
             subprocess.run(
                 ["/data/project/datbot/svgcleaner/svgcleaner", str(fullName), str(fullName)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-            )
+            )"""
         else:
             try:
                 img: Image = ImageOps.exif_transpose(Image.open(tempFile))

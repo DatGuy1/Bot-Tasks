@@ -40,6 +40,7 @@ regexList = [
     r"\{\{Non-free\s*SVG upscale.*?\}\}",
     r"\{\{SVG upscale.*?\}\}",
 ]
+noReduceRe = r"\{\{Non-free no reduce\}\}"  # Currently no redirects, but we do this to futureproof-ish
 
 suffixStr = " ([[WP:BOT|BOT]] - [[User:DatBot/NonFreeImageResizer/Run|disable]])"
 
@@ -78,6 +79,12 @@ def fileExists(imagePage: mwclient.page.Page) -> bool:
     return False
 
 
+def noReduceExists(imagePage: mwclient.page.Page) -> bool:
+    """Checks whether {{non-free no reduce}} exists"""
+    pageText = imagePage.text()
+    return re.search(noReduceRe, pageText, flags=re.IGNORECASE) is not None
+
+
 def imageRoutine(imageList: list[mwclient.image.Image], upscaleTask: bool, nonFree: bool) -> None:
     filesDone = 0
     for imagePage in imageList:
@@ -89,6 +96,13 @@ def imageRoutine(imageList: list[mwclient.image.Image], upscaleTask: bool, nonFr
             if not fileExists(imagePage):
                 print("Gah, looks like someone removed the tag.")
                 logger.error(f"Tag removed on image; skipped {imagePage.name}")
+            elif noReduceExists(imagePage):
+                logger.warn(f"Conflicting templates found; skipped {imagePage.name}")
+                text = imagePage.text()
+                for regexPhrase in regexList:
+                    text = re.sub(regexPhrase, "{{Non-free manual reduce}}", text, flags=re.IGNORECASE)
+
+                imagePage.edit(text, summary="Conflicting reduction templates found, requesting manual review" + suffixStr)
             else:
                 randomName = str(uuid.uuid4())
                 fileResult = littleimage.downloadImage(randomName, imagePage)

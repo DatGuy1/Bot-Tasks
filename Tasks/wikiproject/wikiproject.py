@@ -18,7 +18,10 @@ magazineStart = "WikiProject Magazines"
 bannershellStart = "WikiProject banner shell"
 
 # https://regex101.com/r/BXBwby/1
-FILE_NAME_RE = re.compile(r'^\s*\|\s*(?:image|cover|image_file|logo)\s*=\s*(?:\[\[)?(?:(?:File|Image)\s*:\s*)?(\w[^|<\]}{\n]*)',  flags=re.IGNORECASE | re.M)  # noqa: E501
+FILE_NAME_RE = re.compile(
+    r"^\s*\|\s*(?:image|cover|image_file|logo)\s*=\s*(?:\[\[)?(?:(?:File|Image)\s*:\s*)?(\w[^|<\]}{\n]*)",
+    flags=re.IGNORECASE | re.M,
+)  # noqa: E501
 
 
 class TagExistsError(Exception):

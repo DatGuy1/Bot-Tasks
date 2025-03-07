@@ -67,13 +67,15 @@ def numPagesInCategory(categoryName: str, secondTry: bool = False) -> int:
         "prop": "categoryinfo",
         # This is honestly dumb and ridiculous. The regex takes the full string and returns it with the project in
         # lowercase
-        "titles": re.sub(
-            r"^(.+?(?= ) )(.+?(?= articles$)) articles$",
-            lambda match: r"{0}{1} articles".format(match.group(1), match.group(2).lower()),
-            categoryName,
-        )
-        if secondTry
-        else categoryName,
+        "titles": (
+            re.sub(
+                r"^(.+?(?= ) )(.+?(?= articles$)) articles$",
+                lambda match: r"{0}{1} articles".format(match.group(1), match.group(2).lower()),
+                categoryName,
+            )
+            if secondTry
+            else categoryName
+        ),
     }
 
     req = api.APIRequest(site, params)

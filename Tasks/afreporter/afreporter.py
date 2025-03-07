@@ -18,18 +18,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
 import json
+import logging
 import sys
 import threading
 import time
 import traceback
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
 from urllib.parse import quote
 
-import toolforge
 import userpass
+
+import toolforge
 from cachetools import TTLCache
 from irc.bot import ServerSpec, SingleServerIRCBot
 from irc.client import ServerNotConnectedError
@@ -42,13 +43,17 @@ if TYPE_CHECKING:
 IRCActive = False
 LogActive = False
 
-logging.basicConfig(filename='/data/project/datbot/logs/afreporter/afreporter.log', format='%(asctime)s %(levelname)s %(message)s')
+logging.basicConfig(
+    filename="/data/project/datbot/logs/afreporter/afreporter.log", format="%(asctime)s %(levelname)s %(message)s"
+)
 logger = logging.getLogger("afreporter")
 logger.setLevel(logging.DEBUG)
+
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     print(f"Uncaught {exc_type} on {datetime.now()}: {exc_value}. {traceback.print_tb(exc_traceback)}")
+
 
 sys.excepthook = handle_exception
 
@@ -70,7 +75,9 @@ DefaultFilterTime = 5
 
 toolforge.set_user_agent("DatBot")
 labsDB = toolforge.connect("enwiki", cluster="analytics")
-labsDB.autocommit(True)  # Otherwise it uses 'repeatable read' https://mariadb.com/kb/en/set-transaction/#repeatable-read
+labsDB.autocommit(
+    True
+)  # Otherwise it uses 'repeatable read' https://mariadb.com/kb/en/set-transaction/#repeatable-read
 
 
 @dataclass
@@ -303,9 +310,12 @@ def logFromDB(lastHitId: int) -> list[FilterHit]:
         labsCursor.execute(
             "SELECT SQL_NO_CACHE afl_id, afl_action, afl_namespace, afl_title, "
             "afl_user_text, afl_timestamp, afl_filter_id FROM abuse_filter_log "
-            "WHERE afl_id > %s ORDER BY afl_id", lastHitId
+            "WHERE afl_id > %s ORDER BY afl_id",
+            lastHitId,
         )
-        return [db_response for row in labsCursor.fetchall() if (db_response := FilterHit.fromDBResponse(row)) is not None]
+        return [
+            db_response for row in labsCursor.fetchall() if (db_response := FilterHit.fromDBResponse(row)) is not None
+        ]
 
 
 def main() -> None:
@@ -322,7 +332,7 @@ def main() -> None:
     vandalismFilters, usernameFilters = GetLists(ircBot)
     lastListCheck = time.time()
 
-    useAPI = checkLag(ircBot, True) # False)
+    useAPI = checkLag(ircBot, True)  # False)
     lastLagCheck = time.time()
 
     # values expire after ttl seconds

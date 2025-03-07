@@ -102,7 +102,9 @@ def imageRoutine(imageList: list[mwclient.image.Image], upscaleTask: bool, nonFr
                 for regexPhrase in regexList:
                     text = re.sub(regexPhrase, "{{Non-free manual reduce}}", text, flags=re.IGNORECASE)
 
-                imagePage.edit(text, summary="Conflicting reduction templates found, requesting manual review" + suffixStr)
+                imagePage.edit(
+                    text, summary="Conflicting reduction templates found, requesting manual review" + suffixStr
+                )
             else:
                 randomName = str(uuid.uuid4())
                 fileResult = littleimage.downloadImage(randomName, imagePage)
@@ -182,9 +184,7 @@ def imageRoutine(imageList: list[mwclient.image.Image], upscaleTask: bool, nonFr
                     )
                 else:
                     try:
-                        uploadComment = (
-                            "Upscale SVG" if upscaleTask else "Reduce size of non-free image"
-                        )
+                        uploadComment = "Upscale SVG" if upscaleTask else "Reduce size of non-free image"
                         with fileResult.open("rb") as fileHandle:
                             # noinspection PyTypeChecker
                             site.upload(fileHandle, imagePage.name, uploadComment + suffixStr, ignore=True)

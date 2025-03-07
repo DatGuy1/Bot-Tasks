@@ -13,7 +13,7 @@ python3 -m pip install -U pip wheel
 pip install git+https://github.com/DatGuy1/wikitools.git
 
 # packages for afreporter
-pip install cachetools irc pymysql num2words
+pip install cachetools irc num2words toolforge PyYAML
 
 # packages for wikiwork
 pip install mwparserfromhell

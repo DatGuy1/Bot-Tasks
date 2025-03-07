@@ -17,20 +17,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-import configparser
-import datetime
 import json
+import sys
 import threading
 import time
+import traceback
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from functools import cache
 from urllib.parse import quote
 
+import toolforge
 import userpass
-import pymysql as MySQLdb
 from cachetools import TTLCache
 from irc.bot import ServerSpec, SingleServerIRCBot
+from irc.client import ServerNotConnectedError
 from num2words import num2words
 from wikitools import *
 
@@ -40,9 +42,15 @@ if TYPE_CHECKING:
 IRCActive = False
 LogActive = False
 
-logging.basicConfig(filename='/data/project/datbot/logs/afreporter.log', format='%(asctime)s %(levelname)s %(message)s')
+logging.basicConfig(filename='/data/project/datbot/logs/afreporter/afreporter.log', format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger("afreporter")
 logger.setLevel(logging.DEBUG)
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    print(f"Uncaught {exc_type} on {datetime.now()}: {exc_value}. {traceback.print_tb(exc_traceback)}")
+
+sys.excepthook = handle_exception
 
 site = wiki.Wiki()
 site.setMaxlag(-1)
@@ -60,15 +68,9 @@ GlobalFilterTime = 5
 
 DefaultFilterTime = 5
 
-configParser = configparser.ConfigParser()
-configParser.read("/data/project/datbot/replica.my.cnf")
-sqlUser = configParser.get("client", "user").strip().strip("'")
-sqlPassword = configParser.get("client", "password").strip().strip("'")
-
-labsDB = MySQLdb.connect(db="enwiki_p", host="enwiki.labsdb", user=sqlUser, password=sqlPassword)
-labsDB.autocommit(True)
-labsDB.ping(True)
-labsCursor = labsDB.cursor()
+toolforge.set_user_agent("DatBot")
+labsDB = toolforge.connect("enwiki", cluster="analytics")
+labsDB.autocommit(True)  # Otherwise it uses 'repeatable read' https://mariadb.com/kb/en/set-transaction/#repeatable-read
 
 
 @dataclass
@@ -77,18 +79,21 @@ class FilterHit:
     action: Literal["edit", "delete", "createaccount", "move", "upload", "autocreateaccount", "stashupload"]
     page: page.Page
     user: user.User
-    timestamp: str
+    timestamp: datetime
     filter_id: int
 
     @classmethod
     def fromAPIResponse(cls, apiResponse: dict[Any, Any]) -> FilterHit:
+        if not apiResponse.get("filter_id", None):
+            return None
+
         return cls(
             hit_id=apiResponse["id"],
             action=apiResponse["action"],
-            page=page.Page(site, apiResponse["title"], namespace=apiResponse["ns"], check=False, followRedirects=False),
+            page=page.Page(site, apiResponse["title"], check=False, followRedirects=False),
             user=user.User(site, apiResponse["user"], check=False),
-            timestamp=apiResponse["timestamp"],
-            filter_id=apiResponse["filter_id"],
+            timestamp=datetime.strptime(apiResponse["timestamp"], "%Y-%m-%dT%H:%M:%SZ"),
+            filter_id=int(apiResponse["filter_id"]),
         )
 
     @classmethod
@@ -98,7 +103,7 @@ class FilterHit:
             action=dbResponse[1].decode(),
             page=page.Page(site, dbResponse[3].decode(), namespace=dbResponse[2], check=False, followRedirects=False),
             user=user.User(site, dbResponse[4].decode(), check=False),
-            timestamp=dbResponse[5].decode(),
+            timestamp=datetime.strptime(dbResponse[5].decode(), "%Y%m%d%H%M%S"),
             filter_id=dbResponse[6],
         )
 
@@ -176,7 +181,10 @@ class CommandBot(SingleServerIRCBot):
         if self.abuseChannel is None:
             return
 
-        self.abuseChannel.privmsg("#wikipedia-en-abuse-log", message)
+        try:
+            self.abuseChannel.privmsg("#wikipedia-en-abuse-log", message)
+        except ServerNotConnectedError:
+            pass
 
 
 class BotRunnerThread(threading.Thread):
@@ -194,20 +202,25 @@ def checkLag(ircBot: CommandBot, useAPI: bool) -> bool:
 
     while True:
         # Check replication lag
-        labsCursor.execute(
-            "SELECT UNIX_TIMESTAMP() - UNIX_TIMESTAMP(rc_timestamp) FROM recentchanges "
-            "ORDER BY rc_timestamp DESC LIMIT 1"
-        )
-        repLag = labsCursor.fetchone()[0]
+        with labsDB.cursor() as labsCursor:
+            try:
+                labsCursor.execute(
+                    "SELECT UNIX_TIMESTAMP() - UNIX_TIMESTAMP(rc_timestamp) FROM recentchanges "
+                    "ORDER BY rc_timestamp DESC LIMIT 1"
+                )
+                repLag: float = round(labsCursor.fetchone()[0], 2)
+            except:  # TODO: Use the OperationException
+                repLag = 0
+
         # Fallback to API if replag is too high
         if repLag > 300 and not useAPI:
             useAPI = True
-            ircBot.send_message("Labs replag too high, falling back to API")
-            logger.info("Labs replag too high, falling back to API")
-        if repLag < 120 and useAPI:
-            useAPI = False
-            ircBot.send_message("Using Labs database")
-            logger.info("Using Labs database")
+            ircBot.send_message(f"Labs replag too high ({repLag}), falling back to API")
+            logger.info(f"Labs replag too high ({repLag}), falling back to API")
+        # if repLag < 120 and useAPI:
+        #     useAPI = False
+        #     ircBot.send_message(f"Replag at {repLag}, switching to Labs database")
+        #     logger.info(f"Replag at {repLag}, switching to Labs database")
 
         # Check maxlag if we're using the API
         if useAPI:
@@ -218,9 +231,10 @@ def checkLag(ircBot: CommandBot, useAPI: bool) -> bool:
             # If maxlag is too high, just stop
             if maxLag > 600 and not lagWaitedOut:
                 lagWaitedOut = True
-                ircBot.send_message("Server lag too high, stopping reports")
-                logger.info("Server lag too high, stopping reports")
+                ircBot.send_message(f"Server lag too high ({maxLag}), stopping reports")
+                logger.info(f"Server lag too high ({maxLag}), stopping reports")
             if lagWaitedOut and maxLag > 120:
+                logger.info("Lag still too high, waiting 120 more seconds")
                 time.sleep(120)
                 continue
         break
@@ -243,36 +257,32 @@ def FormatOccurrences(occurrences: int) -> str:
         return f"{wordRepresentation} times "
 
 
-def getStart(useAPI: bool) -> tuple[int, int]:
+def getStart(useAPI: bool) -> tuple[datetime, int]:
     if useAPI:
         params = {"action": "query", "list": "abuselog", "aflprop": "ids|timestamp", "afllimit": "1"}
         req = api.APIRequest(site, params)
         res = req.query(False)
         row = res["query"]["abuselog"][0]
-        lastHitTime = row["timestamp"]
+        lastHitTime = datetime.strptime(row["timestamp"], "%Y-%m-%dT%H:%M:%SZ")
         lastHitId = row["id"]
     else:
-        labsCursor.execute("SELECT afl_timestamp, afl_id FROM abuse_filter_log ORDER BY afl_id DESC LIMIT 1")
-        (lastHitTime, lastHitId) = labsCursor.fetchone()
+        with labsDB.cursor() as labsCursor:
+            labsCursor.execute("SELECT afl_timestamp, afl_id FROM abuse_filter_log ORDER BY afl_id DESC LIMIT 1")
+            fetchResults = labsCursor.fetchone()
+            (lastHitTime, lastHitId) = (datetime.strptime(fetchResults[0].decode(), "%Y%m%d%H%M%S"), fetchResults[1])
 
     return lastHitTime, lastHitId
 
 
-def normaliseTimestamp(timestamp: Any) -> str:  # normalize a timestamp to the API format
-    timestamp = str(timestamp)
-    if "Z" in timestamp:
-        return timestamp
-
-    timestamp = datetime.datetime.strptime(timestamp, "%Y%m%d%H%M%S")
+def normaliseTimestamp(timestamp: datetime) -> str:  # normalize a timestamp to the API format
     return timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def logFromAPI(lastEditTime: int) -> list[FilterHit]:
-    lastEditTime = normaliseTimestamp(lastEditTime)
+def logFromAPI(lastHitTime: datetime) -> list[FilterHit]:
     params = {
         "action": "query",
         "list": "abuselog",
-        "aflstart": lastEditTime,
+        "aflstart": normaliseTimestamp(lastHitTime),
         "aflprop": "ids|user|action|title|timestamp",
         "afllimit": "50",
         "afldir": "newer",
@@ -284,16 +294,18 @@ def logFromAPI(lastEditTime: int) -> list[FilterHit]:
         # The API uses >=, so the first row will be the same as the last row of the last set
         del rows[0]
 
-    return [FilterHit.fromAPIResponse(row) for row in rows]
+    # https://peps.python.org/pep-0572/#simplifying-list-comprehensions
+    return [api_response for row in rows if (api_response := FilterHit.fromAPIResponse(row)) is not None]
 
 
 def logFromDB(lastHitId: int) -> list[FilterHit]:
-    labsCursor.execute(
-        "SELECT SQL_NO_CACHE afl_id, afl_action, afl_namespace, afl_title, "
-        "afl_user_text, afl_timestamp, afl_filter_id FROM abuse_filter_log "
-        f"WHERE afl_id > {lastHitId} ORDER BY afl_id"
-    )
-    return [FilterHit.fromDBResponse(row) for row in labsCursor.fetchall()]
+    with labsDB.cursor() as labsCursor:
+        labsCursor.execute(
+            "SELECT SQL_NO_CACHE afl_id, afl_action, afl_namespace, afl_title, "
+            "afl_user_text, afl_timestamp, afl_filter_id FROM abuse_filter_log "
+            "WHERE afl_id > %s ORDER BY afl_id", lastHitId
+        )
+        return [db_response for row in labsCursor.fetchall() if (db_response := FilterHit.fromDBResponse(row)) is not None]
 
 
 def main() -> None:
@@ -310,7 +322,7 @@ def main() -> None:
     vandalismFilters, usernameFilters = GetLists(ircBot)
     lastListCheck = time.time()
 
-    useAPI = checkLag(ircBot, False)
+    useAPI = checkLag(ircBot, True) # False)
     lastLagCheck = time.time()
 
     # values expire after ttl seconds
@@ -332,7 +344,7 @@ def main() -> None:
             useAPI = checkLag(ircBot, useAPI)
             lastLagCheck = timeNow
 
-        registeredHits: list[tuple[user.User, str]] = []
+        registeredHits: set[tuple[user.User, str]] = set()
         filterHits = logFromAPI(lastHitTime) if useAPI else logFromDB(lastHitId)
         for filterHit in filterHits:
             if filterHit.hit_id <= lastHitId:
@@ -410,7 +422,7 @@ def main() -> None:
             if (hitUser, filterHit.timestamp) in registeredHits:
                 continue
 
-            registeredHits.append((hitUser, filterHit.timestamp))
+            registeredHits.add((hitUser, filterHit.timestamp))
 
             # Generic trip reporting checks
             userTripTracker[hitUser] = userTripTracker.get(hitUser, 0) + 1

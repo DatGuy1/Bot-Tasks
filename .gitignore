@@ -36,6 +36,7 @@ Footy/
 
 # Ignore task with other repository. This should probably be replaced as a submodule
 footy-league-updater/
+deletion-notifier/
 
 # Ignore sensitive authentication files
 userpass.py

@@ -58,8 +58,8 @@ def IsEditNecessary(pageAmount: int) -> bool:
 def UpdateTemplate(pageAmount: int) -> None:
     backlogLevel = ConvertPagesToLevel(pageAmount)
     newText = TemplateText.format(level=backlogLevel, num_pages=pageAmount)
-    UpdatePage.edit(text=newText, summary=SummaryText.format(backlogLevel, pageAmount), bot=True)
 
+    UpdatePage.edit(text=newText, summary=SummaryText.format(backlogLevel, pageAmount), bot=True)
     UpdatePage.purge(forcerecursivelinkupdate=True)
 
 

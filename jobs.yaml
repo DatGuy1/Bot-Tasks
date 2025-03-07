@@ -61,9 +61,26 @@
   command: echo '' > /data/project/datbot/Tasks/wikiproject/pages_checked.txt
   schedule: "0 0 1 * *"
 - name: footy-league-updater
-  image: bullseye
+  image: tool-datbot/footy-updater:latest
   mem: 1Gi
-  command: "/data/project/datbot/start_rust_task.sh /data/project/datbot/Tasks/SportsStatsBot/footy-league-updater"
+  command: "release"
+  filelog: true
   filelog-stdout: /data/project/datbot/logs/footy-league-updater/stdout.log
   filelog-stderr: /data/project/datbot/logs/footy-league-updater/stderr.log
   schedule: "*/30 * * * *"
+  mount: all
+- name: deletion-notifier
+  image: tool-datbot/deletion-notifier:latest
+  mem: 1Gi
+  command: "release"
+  filelog: true
+  filelog-stdout: /data/project/datbot/logs/deletion-notifier/stdout.log
+  filelog-stderr: /data/project/datbot/logs/deletion-notifier/stderr.log
+  schedule: "30 0 * * *"
+  mount: all
+- name: logrotate-afreporter
+  image: mariadb
+  schedule: "@daily"
+  command: "logrotate -v $TOOL_DATA_DIR/configs/logrotate-afreporter.conf --state $TOOL_DATA_DIR/configs/logrotate-afreporter.state"
+  filelog-stdout: /data/project/datbot/logs/logrotate/afreporter.log
+  filelog-stderr: /data/project/datbot/logs/logrotate/afreporter.log

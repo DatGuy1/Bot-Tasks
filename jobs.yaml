@@ -23,6 +23,7 @@
   filelog-stdout: /data/project/datbot/logs/afreporter/stdout.log
   filelog-stderr: /data/project/datbot/logs/afreporter/stderr.log
   continuous: true
+  health-check-script: "test -e /tmp/afreporter-alive && rm /tmp/afreporter-alive"
 #   emails: onfailure
 - name: wikiproject
   image: python3.11

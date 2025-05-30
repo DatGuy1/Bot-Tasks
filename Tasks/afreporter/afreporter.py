@@ -345,6 +345,10 @@ def main() -> None:
 
     (lastHitTime, lastHitId) = getStart(useAPI)
     while True:
+        # Health check: https://wikitech.wikimedia.org/wiki/Help:Toolforge/Jobs_framework#Configuring_health-checks_for_jobs
+        with open("/tmp/afreporter-alive", "w") as f:
+            f.write("alive")
+
         # Refetch lists every five minutes
         timeNow = time.time()
         if timeNow > lastListCheck + 300:

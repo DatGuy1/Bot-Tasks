@@ -134,7 +134,7 @@ def imageRoutine(imageList: list[mwclient.image.Image], upscaleTask: bool, nonFr
                         text = re.sub(regexPhrase, "", text, flags=re.IGNORECASE)
                     imagePage.edit(
                         text,
-                        summary="Removing {{{{[[Template:{0}|{0}]]}}}} since file is already adequately sized".format(
+                        summary="Removing {{[[Template:{0}|{0}]]}} since file is already adequately sized".format(
                             "SVG upscale" if upscaleTask else "Non-free reduce"
                         )
                         + suffixStr,

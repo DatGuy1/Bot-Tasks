@@ -112,17 +112,18 @@ def EditPage(filePage: page.Page, isJournal: bool, originalPage: page.Page, bann
         return
 
     if isJournal:
-        wpToAdd = "{{WikiProject Academic Journals|class=File}}"
+        wpToAdd = "{{WikiProject Academic Journals}}"
         transcludePage = infoboxTemplates["journal"]
     else:
-        wpToAdd = "{{WikiProject Magazines|class=File}}"
+        wpToAdd = "{{WikiProject Magazines}}"
         transcludePage = infoboxTemplates["magazine"]
 
     bannershellCheck = [s for s in bannershellWP if s in fileText]
 
     if len(bannershellCheck) > 0:
         fileText = re.sub(
-            r"({}.*\|1=)".format(bannershellCheck[0]), r"\g<1>\n{}".format(wpToAdd), fileText, re.IGNORECASE
+            r"(\{\{{}.*\|(?:1=)?\n)".format(bannershellCheck[0]),
+            r"\g<1>{}\n".format(wpToAdd), fileText, re.IGNORECASE
         )
     else:
         fileText = "{}\n".format(wpToAdd + fileText)

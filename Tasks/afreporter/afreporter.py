@@ -46,6 +46,7 @@ LogActive = False
 logging.basicConfig(
     filename="/data/project/datbot/logs/afreporter/afreporter.log", format="%(asctime)s %(levelname)s %(message)s"
 )
+logging.captureWarnings(True)
 logger = logging.getLogger("afreporter")
 logger.setLevel(logging.DEBUG)
 
@@ -222,8 +223,8 @@ def checkLag(ircBot: CommandBot, useAPI: bool) -> bool:
         # Fallback to API if replag is too high
         if repLag > 300 and not useAPI:
             useAPI = True
-            ircBot.send_message(f"Labs replag too high ({repLag}), falling back to API")
             logger.info(f"Labs replag too high ({repLag}), falling back to API")
+            ircBot.send_message(f"Labs replag too high ({repLag}), falling back to API")
         # if repLag < 120 and useAPI:
         #     useAPI = False
         #     ircBot.send_message(f"Replag at {repLag}, switching to Labs database")
@@ -238,17 +239,18 @@ def checkLag(ircBot: CommandBot, useAPI: bool) -> bool:
             # If maxlag is too high, just stop
             if maxLag > 600 and not lagWaitedOut:
                 lagWaitedOut = True
-                ircBot.send_message(f"Server lag too high ({maxLag}), stopping reports")
                 logger.info(f"Server lag too high ({maxLag}), stopping reports")
+                ircBot.send_message(f"Server lag too high ({maxLag}), stopping reports")
             if lagWaitedOut and maxLag > 120:
                 logger.info("Lag still too high, waiting 120 more seconds")
                 time.sleep(120)
                 continue
+
         break
 
     if lagWaitedOut:
-        ircBot.send_message("Restarting reports")
         logger.info("Restarting reports")
+        ircBot.send_message("Restarting reports")
 
     return useAPI
 
@@ -291,7 +293,7 @@ def logFromAPI(lastHitTime: datetime) -> list[FilterHit]:
         "list": "abuselog",
         "aflstart": normaliseTimestamp(lastHitTime),
         "aflprop": "ids|user|action|title|timestamp",
-        "afllimit": "50",
+        "afllimit": "300",
         "afldir": "newer",
     }
     req = api.APIRequest(site, params)
@@ -360,6 +362,7 @@ def main() -> None:
 
         registeredHits: set[tuple[user.User, str]] = set()
         filterHits = logFromAPI(lastHitTime) if useAPI else logFromDB(lastHitId)
+        # logger.debug(filterHits)
         for filterHit in filterHits:
             if filterHit.hit_id <= lastHitId:
                 continue
@@ -375,6 +378,7 @@ def main() -> None:
 
             hitUser = filterHit.user
             hitUser.setUserInfo()
+            # if temporary user, "temp" will be in hitUser.groups. Can probably add to wikitools fork as well
             if not hitUser.exists and not hitUser.isIP:
                 continue
 
@@ -460,10 +464,12 @@ def main() -> None:
                 AIVreportTracker[hitUser] = True
 
         if len(filterHits) > 0:
-            lastHitId = filterHits[-1].hit_id
-            lastHitTime = filterHits[-1].timestamp
+            # lastHit = max(filterHits, key=lambda h: h.hit_id)
+            lastHit = filterHits[-1]
+            lastHitId = lastHit.hit_id
+            lastHitTime = lastHit.timestamp
 
-        time.sleep(1.5)
+        time.sleep(3)
 
 
 @property
@@ -500,10 +506,7 @@ def reportUser(targetUser: user.User, filterHit: FilterHit, trippedFilter: Optio
         return
 
     targetUsername = targetUser.name
-    if targetUser.isIP:
-        reportLine = "\n* {{IPvandal|%s}} – " % targetUsername
-    else:
-        reportLine = "\n* {{Vandal|1=%s}} – " % targetUsername
+    reportLine = "\n* {{Vandal|1=%s}} – " % targetUsername
 
     fpLink = f"{{{{False positive other/Link|username={targetUsername}|description=Reported by DatBot to AIV/TB2"
     editSummary = f"Reporting [[Special:Contributions/{targetUsername}]]"
@@ -591,8 +594,8 @@ def GetLists(ircBot: CommandBot) -> tuple[dict[int, Filter], dict[int, Filter]]:
     try:
         pageJson = json.loads(filtersPage.getWikiText(force=True))
     except json.decoder.JSONDecodeError:
-        ircBot.send_message("Syntax error detected in filter list page - [[Template:DatBot filters]]")
         logger.error("Syntax error detected in filter list page - [[Template:DatBot filters]]")
+        ircBot.send_message("Syntax error detected in filter list page - [[Template:DatBot filters]]")
         return vandalismFilters, usernameFilters
 
     DefaultFilterTime = pageJson["defaults"].get("time", 5)
